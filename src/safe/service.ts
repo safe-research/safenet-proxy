@@ -4,7 +4,9 @@ import type { SafeTransactionWithDomain } from "./types.js";
 
 const SHORT_NAMES: Record<string, string> = {
 	"1": "eth",
+	"10": "oeth",
 	"100": "gno",
+	"42161": "arb1",
 };
 
 export const transactionDetails = async (
