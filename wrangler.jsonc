@@ -14,7 +14,7 @@
 		"CONSENSUS_ADDRESSES": "{\"100\":\"0x21c2B6C8473051fb6dED83fE6F0609e53747Cbb4\"}",
 		// Comma-separated list of chain IDs to submit attestations to
 		"CHAIN_IDS": "100",
-		"SAMPLE_RATE": "50"
+		"SAMPLE_RATE": "1000"
 	},
 	"queues": {
 		"producers": [

@@ -24,7 +24,7 @@ export const handleProposal = async (
 ) => {
 	try {
 		const config = configSchema.parse(c.env);
-		if (sampled && config.SAMPLE_RATE >= Math.random() * 100) {
+		if (sampled && config.SAMPLE_RATE < Math.random() * 100) {
 			return c.body(null, 202);
 		}
 
