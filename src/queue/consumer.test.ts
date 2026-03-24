@@ -18,15 +18,19 @@ vi.mock("viem", async (importOriginal) => {
 // ---- fixtures ---------------------------------------------------------------
 
 const VALID_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const TEST_API_KEY = "some_random_api_key";
 const SEPOLIA_RPC = "https://sepolia.example.com";
 const SEPOLIA_ID = "11155111";
 
 const ENV = {
 	PRIVATE_KEY: VALID_PRIVATE_KEY,
+	SAFE_API_KEY: TEST_API_KEY,
 	RPC_URLS: JSON.stringify({ [SEPOLIA_ID]: SEPOLIA_RPC }),
 	CONSENSUS_ADDRESSES: JSON.stringify({ [SEPOLIA_ID]: zeroAddress }),
 	CHAIN_IDS: SEPOLIA_ID,
-};
+	PROPOSAL_QUEUE: undefined as unknown,
+	SAMPLE_RATE: "0",
+} as CloudflareBindings;
 
 const SAFE_TX: SafeTransactionWithDomain = {
 	to: zeroAddress,
@@ -154,10 +158,13 @@ describe("handleQueueBatch", () => {
 
 		const multiChainEnv = {
 			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
 			CHAIN_IDS: "11155111,100",
 			RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": "https://gnosis.example.com" }),
 			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": zeroAddress, "100": zeroAddress }),
-		};
+			PROPOSAL_QUEUE: undefined as unknown,
+			SAMPLE_RATE: "0",
+		} as CloudflareBindings;
 
 		const messages = [makeMessage()];
 		await handleQueueBatch(makeBatch(messages), multiChainEnv);

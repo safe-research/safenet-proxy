@@ -42,7 +42,7 @@ src/
 2. **Environment variables:**
    Required for local development and deployment:
    - `PRIVATE_KEY`: Private key for transaction signing
-   - `RPC_URL`: Ethereum RPC endpoint URL
+   - `RPC_URLS`: Ethereum RPC endpoint URL
 
 3. **Generate Cloudflare bindings types:**
    ```sh

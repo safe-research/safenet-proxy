@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { configSchema } from "./schemas.js";
 
 const VALID_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const TEST_API_KEY = "some_random_api_key";
 const SEPOLIA_RPC = "https://sepolia.example.com";
 // Checksummed zero address accepted by checkedAddressSchema
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 const BASE_ENV = {
 	PRIVATE_KEY: VALID_PRIVATE_KEY,
+	SAFE_API_KEY: TEST_API_KEY,
 	RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC }),
 	CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS }),
 };
@@ -26,6 +28,7 @@ describe("configSchema — CHAIN_IDS", () => {
 	it("parses multiple comma-separated chain IDs", () => {
 		const result = configSchema.parse({
 			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
 			CHAIN_IDS: "11155111,100",
 			RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": SEPOLIA_RPC }),
 			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS, "100": ZERO_ADDRESS }),
@@ -98,6 +101,7 @@ describe("configSchema — cross-field validation", () => {
 		expect(() =>
 			configSchema.parse({
 				PRIVATE_KEY: VALID_PRIVATE_KEY,
+				SAFE_API_KEY: TEST_API_KEY,
 				CHAIN_IDS: "11155111,100",
 				RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC }), // 100 missing
 				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS, "100": ZERO_ADDRESS }),
@@ -109,6 +113,7 @@ describe("configSchema — cross-field validation", () => {
 		expect(() =>
 			configSchema.parse({
 				PRIVATE_KEY: VALID_PRIVATE_KEY,
+				SAFE_API_KEY: TEST_API_KEY,
 				CHAIN_IDS: "11155111,100",
 				RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": SEPOLIA_RPC }),
 				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS }), // 100 missing
