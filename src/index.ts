@@ -4,16 +4,7 @@ import { handleProposal, handleTx } from "./proposals/handler.js";
 import { handleQueueBatch } from "./queue/consumer.js";
 import type { QueueMessage } from "./queue/types.js";
 
-interface Bindings {
-	PRIVATE_KEY: string;
-	RPC_URLS: string;
-	CONSENSUS_ADDRESSES: string;
-	PROPOSAL_QUEUE: Queue<QueueMessage>;
-	CHAIN_IDS?: string;
-	SAMPLE_RATE?: string;
-}
-
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 
 app.use("/*", cors());
 
@@ -32,4 +23,4 @@ app.post("/sampled", async (c) => {
 export default {
 	fetch: app.fetch,
 	queue: handleQueueBatch,
-} satisfies ExportedHandler<Bindings, QueueMessage>;
+} satisfies ExportedHandler<CloudflareBindings, QueueMessage>;
