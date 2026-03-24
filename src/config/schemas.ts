@@ -14,7 +14,7 @@ export const configSchema = z
 		PRIVATE_KEY: hexDataSchema,
 		SAFE_API_KEY: z.string(),
 		RPC_URLS: jsonStringToRecord(z.url()),
-		CONSENSUS_ADDRESSES: jsonStringToRecord(checkedAddressSchema),
+		CONSENSUS_ADDRESSES: jsonStringToRecord(z.array(checkedAddressSchema).nonempty()),
 		CHAIN_IDS: z.preprocess((val) => {
 			const str = typeof val === "string" ? val : "11155111";
 			return str.split(",").map((s) => s.trim());

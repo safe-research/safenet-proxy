@@ -7,6 +7,7 @@ import {
 	extractChain,
 	type Hex,
 	http,
+	multicall3Abi,
 	size,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -60,7 +61,7 @@ export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: C
 async function processChainMessages(
 	chainId: (typeof supportedChains)[number]["id"],
 	rpcUrl: string,
-	consensusAddress: Address,
+	consensusAddresses: Address[],
 	account: ReturnType<typeof privateKeyToAccount>,
 	transactions: SafeTransactionWithDomain[],
 ): Promise<void> {
@@ -85,7 +86,7 @@ async function processChainMessages(
 				walletClient,
 				chain,
 				account,
-				consensusAddress,
+				consensusAddresses,
 				tx,
 				bufferedMaxFeePerGas,
 				maxPriorityFeePerGas,
@@ -115,22 +116,63 @@ function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas
 	return { data, gas: (estimated * 120n) / 100n };
 }
 
+function encodeMulticall(
+	details: SafeTransactionWithDomain,
+	consensusAddresses: Address[],
+	multicall3Address: Address,
+): { to: Address; data: Hex; gas: bigint } {
+	const calls = consensusAddresses.map((target) => ({
+		target,
+		allowFailure: false,
+		callData: encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeTransaction",
+			args: [details],
+		}),
+	}));
+
+	const data = encodeFunctionData({
+		abi: multicall3Abi,
+		functionName: "aggregate3",
+		args: [calls],
+	});
+
+	// Per-call cost plus multicall3 overhead, with 20% safety buffer
+	const perCallGas = 60_000n + BigInt(size(calls[0].callData)) * 25n;
+	const estimated = 30_000n + perCallGas * BigInt(consensusAddresses.length);
+	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
+}
+
 async function submitTransaction(
 	client: ReturnType<typeof createWalletClient>,
 	chain: ReturnType<typeof extractChain>,
 	account: ReturnType<typeof privateKeyToAccount>,
-	consensusAddress: Address,
+	consensusAddresses: Address[],
 	details: SafeTransactionWithDomain,
 	maxFeePerGas: bigint,
 	maxPriorityFeePerGas: bigint,
 	nonce: number,
 	chainId: number,
 ): Promise<void> {
-	const { data, gas } = encodeTransaction(details);
+	let to: Address;
+	let data: Hex;
+	let gas: bigint;
+
+	if (consensusAddresses.length === 1) {
+		({ data, gas } = encodeTransaction(details));
+		to = consensusAddresses[0];
+	} else {
+		const multicall3Address = chain.contracts?.multicall3?.address;
+		if (!multicall3Address) {
+			throw new Error(`Chain ${chainId} does not have a multicall3 contract configured`);
+		}
+		({ to, data, gas } = encodeMulticall(details, consensusAddresses, multicall3Address));
+	}
+
 	const transactionHash = await client.sendTransaction({
 		chain,
 		account,
-		to: consensusAddress,
+		to,
 		data,
 		gas,
 		maxFeePerGas,

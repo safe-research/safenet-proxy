@@ -11,8 +11,8 @@
 	//   RPC_URLS     — JSON string mapping chain ID to RPC URL, e.g. {"11155111":"https://...","100":"https://..."}
 	//   SAFE_API_KEY — API Key for the Safe API
 	"vars": {
-		// JSON string mapping chain ID to consensus contract address, e.g. {"11155111":"0xAbc...","100":"0xDef..."}
-		"CONSENSUS_ADDRESSES": "{\"100\":\"0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9\"}",
+		// JSON string mapping chain ID to list of consensus contract addresses, e.g. {"11155111":["0xAbc..."],"100":["0xDef...","0xGhi..."]}
+		"CONSENSUS_ADDRESSES": "{\"100\":[\"0x223624cBF099e5a8f8cD5aF22aFa424a1d1acEE9\"]}",
 		// Comma-separated list of chain IDs to submit attestations to
 		"CHAIN_IDS": "100",
 		"SAMPLE_RATE": "100"
