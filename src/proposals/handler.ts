@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { configSchema } from "../config/schemas.js";
+import type { Config } from "../config/types.js";
 import type { QueueMessage } from "../queue/types.js";
 import {
 	safeTransactionWithDomain,
@@ -11,14 +12,7 @@ import { handleError } from "../utils/errors.js";
 
 export const handleProposal = async (
 	c: Context<{
-		Bindings: {
-			PROPOSAL_QUEUE: Queue;
-			PRIVATE_KEY: string;
-			RPC_URLS: string;
-			CONSENSUS_ADDRESSES: string;
-			CHAIN_IDS?: string;
-			SAMPLE_RATE?: string;
-		};
+		Bindings: CloudflareBindings;
 	}>,
 	sampled = false,
 ) => {
@@ -34,7 +28,7 @@ export const handleProposal = async (
 		}
 
 		// Fetch transaction details synchronously
-		c.executionCtx.waitUntil(processProposalAsync(c.env.PROPOSAL_QUEUE, request.data));
+		c.executionCtx.waitUntil(processProposalAsync(config, c.env.PROPOSAL_QUEUE, request.data));
 
 		return c.body(null, 202);
 	} catch (e: unknown) {
@@ -45,14 +39,7 @@ export const handleProposal = async (
 
 export const handleTx = async (
 	c: Context<{
-		Bindings: {
-			PROPOSAL_QUEUE: Queue;
-			PRIVATE_KEY: string;
-			RPC_URLS: string;
-			CONSENSUS_ADDRESSES: string;
-			CHAIN_IDS?: string;
-			SAMPLE_RATE?: string;
-		};
+		Bindings: CloudflareBindings;
 	}>,
 	sampled = false,
 ) => {
@@ -82,11 +69,14 @@ export const handleTx = async (
 	}
 };
 
-async function processProposalAsync(queue: Queue<QueueMessage>, event: TransactionExecutedEvent): Promise<void> {
+async function processProposalAsync(
+	config: Config,
+	queue: Queue<QueueMessage>,
+	event: TransactionExecutedEvent,
+): Promise<void> {
 	try {
-		const details = await transactionDetails(event.chainId, event.safeTxHash);
+		const details = await transactionDetails(config.SAFE_API_KEY, event.chainId, event.safeTxHash);
 		if (details === null) {
-			console.error(`Transaction details not found for ${event.safeTxHash}`);
 			return;
 		}
 

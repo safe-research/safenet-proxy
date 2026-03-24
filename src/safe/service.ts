@@ -10,16 +10,34 @@ const SHORT_NAMES: Record<string, string> = {
 };
 
 export const transactionDetails = async (
+	apiKey: string,
 	chainId: bigint,
 	safeTxHash: Hex,
 ): Promise<SafeTransactionWithDomain | null> => {
 	const shortName = SHORT_NAMES[chainId.toString()];
-	if (shortName === undefined) return null;
+	if (shortName === undefined) {
+		console.error(`Requesting details for eip155:${chainId}:${safeTxHash}`);
+		return null;
+	}
 	const response = await fetch(
 		`https://api.safe.global/tx-service/${shortName}/api/v2/multisig-transactions/${safeTxHash}/`,
+		{
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+			},
+		},
 	);
+	if (!response.ok) {
+		console.error(
+			`Could not fetch transaction defails for eip155:${chainId}:${safeTxHash} (status ${response.status})`,
+		);
+		return null;
+	}
 	const parsed = safeTransactionWithAccount.safeParse(await response.json());
-	if (!parsed.success) return null;
+	if (!parsed.success) {
+		console.error(`Could not parse transaction defails for eip155:${chainId}:${safeTxHash} (${parsed.error.message})`);
+		return null;
+	}
 	return {
 		chainId,
 		...parsed.data,

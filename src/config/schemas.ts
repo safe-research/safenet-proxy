@@ -12,6 +12,7 @@ const jsonStringToRecord = <V extends z.ZodTypeAny>(valueSchema: V) =>
 export const configSchema = z
 	.object({
 		PRIVATE_KEY: hexDataSchema,
+		SAFE_API_KEY: z.string(),
 		RPC_URLS: jsonStringToRecord(z.url()),
 		CONSENSUS_ADDRESSES: jsonStringToRecord(checkedAddressSchema),
 		CHAIN_IDS: z.preprocess((val) => {
@@ -23,11 +24,11 @@ export const configSchema = z
 	.superRefine((config, ctx) => {
 		for (const id of config.CHAIN_IDS) {
 			if (config.RPC_URLS[String(id)] === undefined) {
-				ctx.addIssue({ code: z.ZodIssueCode.custom, message: `RPC_URLS missing entry for chain ${id}` });
+				ctx.addIssue({ code: "custom", message: `RPC_URLS missing entry for chain ${id}` });
 			}
 			if (config.CONSENSUS_ADDRESSES[String(id)] === undefined) {
 				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
+					code: "custom",
 					message: `CONSENSUS_ADDRESSES missing entry for chain ${id}`,
 				});
 			}

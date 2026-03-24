@@ -17,15 +17,7 @@ import { CONSENSUS_FUNCTIONS } from "../utils/abis.js";
 import { queueMessageSchema } from "./schemas.js";
 import type { QueueMessage } from "./types.js";
 
-interface QueueEnv {
-	PRIVATE_KEY: string;
-	RPC_URLS: string;
-	CONSENSUS_ADDRESSES: string;
-	CHAIN_IDS?: string;
-	SAMPLE_RATE?: string;
-}
-
-export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: QueueEnv): Promise<void> {
+export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: CloudflareBindings): Promise<void> {
 	const config = configSchema.parse(env);
 	const account = privateKeyToAccount(config.PRIVATE_KEY);
 

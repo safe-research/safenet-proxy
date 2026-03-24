@@ -9,12 +9,13 @@
 	// Secrets (set via `wrangler secret put`):
 	//   PRIVATE_KEY  — hex-encoded private key used to sign transactions on all chains
 	//   RPC_URLS     — JSON string mapping chain ID to RPC URL, e.g. {"11155111":"https://...","100":"https://..."}
+	//   SAFE_API_KEY — API Key for the Safe API
 	"vars": {
 		// JSON string mapping chain ID to consensus contract address, e.g. {"11155111":"0xAbc...","100":"0xDef..."}
 		"CONSENSUS_ADDRESSES": "{\"100\":\"0x21c2B6C8473051fb6dED83fE6F0609e53747Cbb4\"}",
 		// Comma-separated list of chain IDs to submit attestations to
 		"CHAIN_IDS": "100",
-		"SAMPLE_RATE": "1000"
+		"SAMPLE_RATE": "100"
 	},
 	"queues": {
 		"producers": [
