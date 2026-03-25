@@ -22,7 +22,7 @@ echo '{"11155111":"https://sepolia.infura.io/v3/...","100":"https://rpc.gnosisch
 # JSON object mapping chain ID → list of consensus contract addresses.
 # Each safe transaction is proposed to all addresses in the list via a
 # single multicall3 transaction.
-echo '{"11155111":["0xAbc..."],"100":["0xDef...","0xGhi..."]}' \
+echo '{"11155111":["0xAbc..."],"100":["0xDef...","0x123..."]}' \
   | npm exec -- wrangler secret put CONSENSUS_ADDRESSES
 ```
 

@@ -128,11 +128,8 @@ function encodeMulticall(
 	consensusAddresses: Address[],
 	multicall3Address: Address,
 ): { to: Address; data: Hex; gas: bigint } {
-	const calls = consensusAddresses.map((target) => ({
-		target,
-		allowFailure: false,
-		callData: encodeProposeTransaction(details),
-	}));
+	const callData = encodeProposeTransaction(details);
+	const calls = consensusAddresses.map((target) => ({ target, allowFailure: false, callData }));
 
 	const data = encodeFunctionData({
 		abi: multicall3Abi,
@@ -141,7 +138,7 @@ function encodeMulticall(
 	});
 
 	// Per-call cost plus multicall3 overhead, with 20% safety buffer
-	const estimated = 30_000n + estimateCallGas(calls[0].callData) * BigInt(consensusAddresses.length);
+	const estimated = 30_000n + estimateCallGas(callData) * BigInt(consensusAddresses.length);
 	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
 }
 
@@ -164,11 +161,9 @@ async function submitTransaction(
 		({ data, gas } = encodeTransaction(details));
 		to = consensusAddresses[0];
 	} else {
-		const multicall3Address = chain.contracts?.multicall3?.address;
-		if (!multicall3Address) {
-			throw new Error(`Chain ${chainId} does not have a multicall3 contract configured`);
-		}
-		({ to, data, gas } = encodeMulticall(details, consensusAddresses, multicall3Address));
+		// multicall3 availability is validated at config parse time
+		// biome-ignore lint/style/noNonNullAssertion: guaranteed by configSchema
+		({ to, data, gas } = encodeMulticall(details, consensusAddresses, chain.contracts!.multicall3!.address));
 	}
 
 	const transactionHash = await client.sendTransaction({

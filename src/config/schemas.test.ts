@@ -82,18 +82,20 @@ describe("configSchema — CONSENSUS_ADDRESSES", () => {
 			...BASE_ENV,
 			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [lowercase] }),
 		});
-		// getAddress() checksums it
-		expect(result.CONSENSUS_ADDRESSES["11155111"][0]).toMatch(/^0x/);
+		expect(result.CONSENSUS_ADDRESSES["11155111"]).toStrictEqual(["0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"]);
 	});
 
-	it("accepts multiple addresses per chain", () => {
+	it("accepts multiple addresses per chain and checksums all of them", () => {
 		const addr1 = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
 		const addr2 = "0x6b175474e89094c44da98b954eedeac495271d0f";
 		const result = configSchema.parse({
 			...BASE_ENV,
 			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [addr1, addr2] }),
 		});
-		expect(result.CONSENSUS_ADDRESSES["11155111"]).toHaveLength(2);
+		expect(result.CONSENSUS_ADDRESSES["11155111"]).toStrictEqual([
+			"0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+			"0x6B175474E89094C44Da98b954EedeAC495271d0F",
+		]);
 	});
 
 	it("rejects an empty array of addresses", () => {
@@ -138,5 +140,18 @@ describe("configSchema — cross-field validation", () => {
 				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [ZERO_ADDRESS] }), // 100 missing
 			}),
 		).toThrow(/CONSENSUS_ADDRESSES missing entry for chain 100/);
+	});
+
+	it("fails when multiple consensus addresses are given for a chain without multicall3", () => {
+		// Anvil (31337) does not have multicall3 configured
+		expect(() =>
+			configSchema.parse({
+				PRIVATE_KEY: VALID_PRIVATE_KEY,
+				SAFE_API_KEY: TEST_API_KEY,
+				CHAIN_IDS: "31337",
+				RPC_URLS: JSON.stringify({ "31337": SEPOLIA_RPC }),
+				CONSENSUS_ADDRESSES: JSON.stringify({ "31337": [ZERO_ADDRESS, ZERO_ADDRESS] }),
+			}),
+		).toThrow(/does not support multicall3/);
 	});
 });
