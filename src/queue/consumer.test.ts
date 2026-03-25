@@ -1,6 +1,7 @@
-import { zeroAddress } from "viem";
+import { encodeFunctionData, multicall3Abi, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { SafeTransactionWithDomain } from "../safe/types.js";
+import { CONSENSUS_FUNCTIONS } from "../utils/abis.js";
 import { handleQueueBatch } from "./consumer.js";
 import type { QueueMessage } from "./types.js";
 
@@ -200,12 +201,29 @@ describe("handleQueueBatch", () => {
 			SAMPLE_RATE: "0",
 		} as CloudflareBindings;
 
+		const proposeCallData = encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeTransaction",
+			args: [SAFE_TX],
+		});
+		const expectedData = encodeFunctionData({
+			abi: multicall3Abi,
+			functionName: "aggregate3",
+			args: [
+				[
+					{ target: addr1, allowFailure: false, callData: proposeCallData },
+					{ target: addr2, allowFailure: false, callData: proposeCallData },
+				],
+			],
+		});
+
 		const messages = [makeMessage()];
 		await handleQueueBatch(makeBatch(messages), multiAddressEnv);
 
-		// One sendTransaction call (not two), and it targets the multicall3 contract
+		// One sendTransaction call (not two), targeting the multicall3 contract with encoded aggregate3 data
 		expect(mockSendTransaction).toHaveBeenCalledTimes(1);
 		expect((mockSendTransaction.mock.calls[0][0].to as string).toLowerCase()).toBe(MULTICALL3_ADDRESS.toLowerCase());
+		expect(mockSendTransaction.mock.calls[0][0].data).toBe(expectedData);
 		expect(messages[0].ack).toHaveBeenCalledOnce();
 	});
 

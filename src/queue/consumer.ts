@@ -104,16 +104,23 @@ async function processChainMessages(
 	}
 }
 
-function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
-	const data = encodeFunctionData({
+// Base formula: 60,000 base + 25 gas/byte, with 20% safety buffer.
+// 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (ExecutionSuccess event) + 1 (overhead)
+function estimateCallGas(callData: Hex): bigint {
+	return 60_000n + BigInt(size(callData)) * 25n;
+}
+
+function encodeProposeTransaction(details: SafeTransactionWithDomain): Hex {
+	return encodeFunctionData({
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "proposeTransaction",
 		args: [details],
 	});
-	// Base formula: 60,000 base + 25 gas/byte, with 20% safety buffer.
-	// 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (ExecutionSuccess event) + 1 (overhead)
-	const estimated = 60_000n + BigInt(size(data)) * 25n;
-	return { data, gas: (estimated * 120n) / 100n };
+}
+
+function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
+	const data = encodeProposeTransaction(details);
+	return { data, gas: (estimateCallGas(data) * 120n) / 100n };
 }
 
 function encodeMulticall(
@@ -124,11 +131,7 @@ function encodeMulticall(
 	const calls = consensusAddresses.map((target) => ({
 		target,
 		allowFailure: false,
-		callData: encodeFunctionData({
-			abi: CONSENSUS_FUNCTIONS,
-			functionName: "proposeTransaction",
-			args: [details],
-		}),
+		callData: encodeProposeTransaction(details),
 	}));
 
 	const data = encodeFunctionData({
@@ -138,8 +141,7 @@ function encodeMulticall(
 	});
 
 	// Per-call cost plus multicall3 overhead, with 20% safety buffer
-	const perCallGas = 60_000n + BigInt(size(calls[0].callData)) * 25n;
-	const estimated = 30_000n + perCallGas * BigInt(consensusAddresses.length);
+	const estimated = 30_000n + estimateCallGas(calls[0].callData) * BigInt(consensusAddresses.length);
 	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
 }
 
