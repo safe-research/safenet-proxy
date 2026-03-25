@@ -9,11 +9,21 @@ npm install
 
 ### Cloudflare Proxy Deployment
 
-To run the minimal cosigner it is require to set `PRIVATE_KEY` and `RPC_URL` secrets. This can be done via the dashboard or wrangler cli:
+The following secrets must be set before deployment. This can be done via the Cloudflare dashboard or the wrangler CLI:
 
 ```sh
-echo "0xsome private key" | npm exec -- wrangler secret put PRIVATE_KEY
-echo "https://some rpc url" | npm exec -- wrangler secret put RPC_URL
+# Hex-encoded private key used to sign transactions
+echo "0xabc..." | npm exec -- wrangler secret put PRIVATE_KEY
+
+# JSON object mapping chain ID → RPC URL
+echo '{"11155111":"https://sepolia.infura.io/v3/...","100":"https://rpc.gnosischain.com"}' \
+  | npm exec -- wrangler secret put RPC_URLS
+
+# JSON object mapping chain ID → list of consensus contract addresses.
+# Each safe transaction is proposed to all addresses in the list via a
+# single multicall3 transaction.
+echo '{"11155111":["0xAbc..."],"100":["0xDef...","0xGhi..."]}' \
+  | npm exec -- wrangler secret put CONSENSUS_ADDRESSES
 ```
 
 [For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
