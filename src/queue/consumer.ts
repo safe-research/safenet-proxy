@@ -7,6 +7,7 @@ import {
 	extractChain,
 	type Hex,
 	http,
+	multicall3Abi,
 	size,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -60,7 +61,7 @@ export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: C
 async function processChainMessages(
 	chainId: (typeof supportedChains)[number]["id"],
 	rpcUrl: string,
-	consensusAddress: Address,
+	consensusAddresses: Address[],
 	account: ReturnType<typeof privateKeyToAccount>,
 	transactions: SafeTransactionWithDomain[],
 ): Promise<void> {
@@ -85,7 +86,7 @@ async function processChainMessages(
 				walletClient,
 				chain,
 				account,
-				consensusAddress,
+				consensusAddresses,
 				tx,
 				bufferedMaxFeePerGas,
 				maxPriorityFeePerGas,
@@ -103,34 +104,72 @@ async function processChainMessages(
 	}
 }
 
-function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
-	const data = encodeFunctionData({
+// Base formula: 60,000 base + 25 gas/byte, with 20% safety buffer.
+// 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (ExecutionSuccess event) + 1 (overhead)
+function estimateCallGas(callData: Hex): bigint {
+	return 60_000n + BigInt(size(callData)) * 25n;
+}
+
+function encodeProposeTransaction(details: SafeTransactionWithDomain): Hex {
+	return encodeFunctionData({
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "proposeTransaction",
 		args: [details],
 	});
-	// Base formula: 60,000 base + 25 gas/byte, with 20% safety buffer.
-	// 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (ExecutionSuccess event) + 1 (overhead)
-	const estimated = 60_000n + BigInt(size(data)) * 25n;
-	return { data, gas: (estimated * 120n) / 100n };
+}
+
+function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
+	const data = encodeProposeTransaction(details);
+	return { data, gas: (estimateCallGas(data) * 120n) / 100n };
+}
+
+function encodeMulticall(
+	details: SafeTransactionWithDomain,
+	consensusAddresses: Address[],
+	multicall3Address: Address,
+): { to: Address; data: Hex; gas: bigint } {
+	const callData = encodeProposeTransaction(details);
+	const calls = consensusAddresses.map((target) => ({ target, allowFailure: false, callData }));
+
+	const data = encodeFunctionData({
+		abi: multicall3Abi,
+		functionName: "aggregate3",
+		args: [calls],
+	});
+
+	// Per-call cost plus multicall3 overhead, with 20% safety buffer
+	const estimated = 30_000n + estimateCallGas(callData) * BigInt(consensusAddresses.length);
+	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
 }
 
 async function submitTransaction(
 	client: ReturnType<typeof createWalletClient>,
 	chain: ReturnType<typeof extractChain>,
 	account: ReturnType<typeof privateKeyToAccount>,
-	consensusAddress: Address,
+	consensusAddresses: Address[],
 	details: SafeTransactionWithDomain,
 	maxFeePerGas: bigint,
 	maxPriorityFeePerGas: bigint,
 	nonce: number,
 	chainId: number,
 ): Promise<void> {
-	const { data, gas } = encodeTransaction(details);
+	let to: Address;
+	let data: Hex;
+	let gas: bigint;
+
+	if (consensusAddresses.length === 1) {
+		({ data, gas } = encodeTransaction(details));
+		to = consensusAddresses[0];
+	} else {
+		// multicall3 availability is validated at config parse time
+		// biome-ignore lint/style/noNonNullAssertion: guaranteed by configSchema
+		({ to, data, gas } = encodeMulticall(details, consensusAddresses, chain.contracts!.multicall3!.address));
+	}
+
 	const transactionHash = await client.sendTransaction({
 		chain,
 		account,
-		to: consensusAddress,
+		to,
 		data,
 		gas,
 		maxFeePerGas,

@@ -14,7 +14,7 @@ export const configSchema = z
 		PRIVATE_KEY: hexDataSchema,
 		SAFE_API_KEY: z.string(),
 		RPC_URLS: jsonStringToRecord(z.url()),
-		CONSENSUS_ADDRESSES: jsonStringToRecord(checkedAddressSchema),
+		CONSENSUS_ADDRESSES: jsonStringToRecord(z.array(checkedAddressSchema).nonempty()),
 		CHAIN_IDS: z.preprocess((val) => {
 			const str = typeof val === "string" ? val : "11155111";
 			return str.split(",").map((s) => s.trim());
@@ -26,11 +26,20 @@ export const configSchema = z
 			if (config.RPC_URLS[String(id)] === undefined) {
 				ctx.addIssue({ code: "custom", message: `RPC_URLS missing entry for chain ${id}` });
 			}
-			if (config.CONSENSUS_ADDRESSES[String(id)] === undefined) {
+			const addresses = config.CONSENSUS_ADDRESSES[String(id)];
+			if (addresses === undefined) {
 				ctx.addIssue({
 					code: "custom",
 					message: `CONSENSUS_ADDRESSES missing entry for chain ${id}`,
 				});
+			} else if (addresses.length > 1) {
+				const chain = supportedChains.find((c) => c.id === id);
+				if (!chain?.contracts?.multicall3?.address) {
+					ctx.addIssue({
+						code: "custom",
+						message: `Chain ${id} has multiple CONSENSUS_ADDRESSES but does not support multicall3`,
+					});
+				}
 			}
 		}
 	});

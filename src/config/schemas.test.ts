@@ -11,7 +11,7 @@ const BASE_ENV = {
 	PRIVATE_KEY: VALID_PRIVATE_KEY,
 	SAFE_API_KEY: TEST_API_KEY,
 	RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC }),
-	CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS }),
+	CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [ZERO_ADDRESS] }),
 };
 
 describe("configSchema — CHAIN_IDS", () => {
@@ -31,7 +31,7 @@ describe("configSchema — CHAIN_IDS", () => {
 			SAFE_API_KEY: TEST_API_KEY,
 			CHAIN_IDS: "11155111,100",
 			RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": SEPOLIA_RPC }),
-			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS, "100": ZERO_ADDRESS }),
+			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [ZERO_ADDRESS], "100": [ZERO_ADDRESS] }),
 		});
 		expect(result.CHAIN_IDS).toEqual([11155111, 100]);
 	});
@@ -80,17 +80,38 @@ describe("configSchema — CONSENSUS_ADDRESSES", () => {
 		const lowercase = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
 		const result = configSchema.parse({
 			...BASE_ENV,
-			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": lowercase }),
+			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [lowercase] }),
 		});
-		// getAddress() checksums it
-		expect(result.CONSENSUS_ADDRESSES["11155111"]).toMatch(/^0x/);
+		expect(result.CONSENSUS_ADDRESSES["11155111"]).toStrictEqual(["0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"]);
 	});
 
-	it("rejects an invalid address inside the record", () => {
+	it("accepts multiple addresses per chain and checksums all of them", () => {
+		const addr1 = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
+		const addr2 = "0x6b175474e89094c44da98b954eedeac495271d0f";
+		const result = configSchema.parse({
+			...BASE_ENV,
+			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [addr1, addr2] }),
+		});
+		expect(result.CONSENSUS_ADDRESSES["11155111"]).toStrictEqual([
+			"0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+			"0x6B175474E89094C44Da98b954EedeAC495271d0F",
+		]);
+	});
+
+	it("rejects an empty array of addresses", () => {
 		expect(() =>
 			configSchema.parse({
 				...BASE_ENV,
-				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": "not-an-address" }),
+				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [] }),
+			}),
+		).toThrow();
+	});
+
+	it("rejects an invalid address inside the array", () => {
+		expect(() =>
+			configSchema.parse({
+				...BASE_ENV,
+				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ["not-an-address"] }),
 			}),
 		).toThrow();
 	});
@@ -104,7 +125,7 @@ describe("configSchema — cross-field validation", () => {
 				SAFE_API_KEY: TEST_API_KEY,
 				CHAIN_IDS: "11155111,100",
 				RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC }), // 100 missing
-				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS, "100": ZERO_ADDRESS }),
+				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [ZERO_ADDRESS], "100": [ZERO_ADDRESS] }),
 			}),
 		).toThrow(/RPC_URLS missing entry for chain 100/);
 	});
@@ -116,8 +137,21 @@ describe("configSchema — cross-field validation", () => {
 				SAFE_API_KEY: TEST_API_KEY,
 				CHAIN_IDS: "11155111,100",
 				RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": SEPOLIA_RPC }),
-				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": ZERO_ADDRESS }), // 100 missing
+				CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [ZERO_ADDRESS] }), // 100 missing
 			}),
 		).toThrow(/CONSENSUS_ADDRESSES missing entry for chain 100/);
+	});
+
+	it("fails when multiple consensus addresses are given for a chain without multicall3", () => {
+		// Anvil (31337) does not have multicall3 configured
+		expect(() =>
+			configSchema.parse({
+				PRIVATE_KEY: VALID_PRIVATE_KEY,
+				SAFE_API_KEY: TEST_API_KEY,
+				CHAIN_IDS: "31337",
+				RPC_URLS: JSON.stringify({ "31337": SEPOLIA_RPC }),
+				CONSENSUS_ADDRESSES: JSON.stringify({ "31337": [ZERO_ADDRESS, ZERO_ADDRESS] }),
+			}),
+		).toThrow(/does not support multicall3/);
 	});
 });
