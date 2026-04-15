@@ -19,7 +19,7 @@ export const transactionDetails = async (
 ): Promise<SafeTransactionWithDomain | null> => {
 	const shortName = SHORT_NAMES[chainId.toString()];
 	if (shortName === undefined) {
-		console.error(`Unknown chain for eip155:${chainId}:${safeTxHash}`);
+		console.error(`Unknown chain short name for eip155:${chainId}:${safeTxHash}`);
 		return null;
 	}
 	const response = await fetch(
