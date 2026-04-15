@@ -5,7 +5,10 @@ import type { SafeTransactionWithDomain } from "./types.js";
 const SHORT_NAMES: Record<string, string> = {
 	"1": "eth",
 	"10": "oeth",
+	"56": "bnb",
 	"100": "gno",
+	"480": "wc",
+	"8453": "base",
 	"42161": "arb1",
 };
 
@@ -16,7 +19,7 @@ export const transactionDetails = async (
 ): Promise<SafeTransactionWithDomain | null> => {
 	const shortName = SHORT_NAMES[chainId.toString()];
 	if (shortName === undefined) {
-		console.error(`Requesting details for eip155:${chainId}:${safeTxHash}`);
+		console.error(`Unknown chain short name for eip155:${chainId}:${safeTxHash}`);
 		return null;
 	}
 	const response = await fetch(
