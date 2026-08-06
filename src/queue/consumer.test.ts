@@ -28,7 +28,7 @@ const ENV = {
 	PRIVATE_KEY: VALID_PRIVATE_KEY,
 	SAFE_API_KEY: TEST_API_KEY,
 	RPC_URLS: JSON.stringify({ [SEPOLIA_ID]: SEPOLIA_RPC }),
-	CONSENSUS_ADDRESSES: JSON.stringify({ [SEPOLIA_ID]: [zeroAddress] }),
+	CONSENSUS_CONFIGS: JSON.stringify({ [SEPOLIA_ID]: [{ address: zeroAddress }] }),
 	CHAIN_IDS: SEPOLIA_ID,
 	PROPOSAL_QUEUE: undefined as unknown,
 	SAMPLE_RATE: "0",
@@ -163,7 +163,10 @@ describe("handleQueueBatch", () => {
 			SAFE_API_KEY: TEST_API_KEY,
 			CHAIN_IDS: "11155111,100",
 			RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": "https://gnosis.example.com" }),
-			CONSENSUS_ADDRESSES: JSON.stringify({ "11155111": [zeroAddress], "100": [zeroAddress] }),
+			CONSENSUS_CONFIGS: JSON.stringify({
+				"11155111": [{ address: zeroAddress }],
+				"100": [{ address: zeroAddress }],
+			}),
 			PROPOSAL_QUEUE: undefined as unknown,
 			SAMPLE_RATE: "0",
 		} as CloudflareBindings;
@@ -196,7 +199,7 @@ describe("handleQueueBatch", () => {
 			SAFE_API_KEY: TEST_API_KEY,
 			CHAIN_IDS: SEPOLIA_ID,
 			RPC_URLS: JSON.stringify({ [SEPOLIA_ID]: SEPOLIA_RPC }),
-			CONSENSUS_ADDRESSES: JSON.stringify({ [SEPOLIA_ID]: [addr1, addr2] }),
+			CONSENSUS_CONFIGS: JSON.stringify({ [SEPOLIA_ID]: [{ address: addr1 }, { address: addr2 }] }),
 			PROPOSAL_QUEUE: undefined as unknown,
 			SAMPLE_RATE: "0",
 		} as CloudflareBindings;

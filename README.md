@@ -19,11 +19,12 @@ echo "0xabc..." | npm exec -- wrangler secret put PRIVATE_KEY
 echo '{"11155111":"https://sepolia.infura.io/v3/...","100":"https://rpc.gnosischain.com"}' \
   | npm exec -- wrangler secret put RPC_URLS
 
-# JSON object mapping chain ID → list of consensus contract addresses.
+# JSON object mapping chain ID → list of consensus configs (address + optional oracle).
 # Each safe transaction is proposed to all addresses in the list via a
-# single multicall3 transaction.
-echo '{"11155111":["0xAbc..."],"100":["0xDef...","0x123..."]}' \
-  | npm exec -- wrangler secret put CONSENSUS_ADDRESSES
+# single multicall3 transaction, unless a config entry sets an oracle,
+# in which case it is submitted via the oracle instead.
+echo '{"11155111":[{"address":"0xAbc..."}],"100":[{"address":"0xDef..."},{"address":"0x123...","oracle":"0x456..."}]}' \
+  | npm exec -- wrangler secret put CONSENSUS_CONFIGS
 ```
 
 [For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
