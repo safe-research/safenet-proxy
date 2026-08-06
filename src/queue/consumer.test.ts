@@ -238,4 +238,102 @@ describe("handleQueueBatch", () => {
 		expect(mockSendTransaction).toHaveBeenCalledTimes(1);
 		expect(mockSendTransaction.mock.calls[0][0].to).toBe(zeroAddress);
 	});
+
+	it("submits via proposeOracleTransaction when the single consensus entry has an oracle configured", async () => {
+		const consensusAddr = "0x3333333333333333333333333333333333333333";
+		const oracleAddr = "0x4444444444444444444444444444444444444444";
+
+		const oracleEnv = {
+			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
+			CHAIN_IDS: SEPOLIA_ID,
+			RPC_URLS: JSON.stringify({ [SEPOLIA_ID]: SEPOLIA_RPC }),
+			CONSENSUS_CONFIGS: JSON.stringify({ [SEPOLIA_ID]: [{ address: consensusAddr, oracle: oracleAddr }] }),
+			PROPOSAL_QUEUE: undefined as unknown,
+			SAMPLE_RATE: "0",
+		} as CloudflareBindings;
+
+		const expectedData = encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeOracleTransaction",
+			args: [oracleAddr, "0x", SAFE_TX],
+		});
+
+		const messages = [makeMessage()];
+		await handleQueueBatch(makeBatch(messages), oracleEnv);
+
+		expect(mockSendTransaction).toHaveBeenCalledTimes(1);
+		expect(mockSendTransaction.mock.calls[0][0].to).toBe(consensusAddr);
+		expect(mockSendTransaction.mock.calls[0][0].data).toBe(expectedData);
+	});
+
+	it("uses a higher gas limit for oracle-configured targets to cover their extra on-chain logic", async () => {
+		await handleQueueBatch(makeBatch([makeMessage()]), ENV);
+		const plainGas = mockSendTransaction.mock.calls[0][0].gas as bigint;
+
+		mockSendTransaction.mockClear();
+
+		const oracleEnv = {
+			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
+			CHAIN_IDS: SEPOLIA_ID,
+			RPC_URLS: JSON.stringify({ [SEPOLIA_ID]: SEPOLIA_RPC }),
+			CONSENSUS_CONFIGS: JSON.stringify({
+				[SEPOLIA_ID]: [{ address: zeroAddress, oracle: zeroAddress }],
+			}),
+			PROPOSAL_QUEUE: undefined as unknown,
+			SAMPLE_RATE: "0",
+		} as CloudflareBindings;
+
+		await handleQueueBatch(makeBatch([makeMessage()]), oracleEnv);
+		const oracleGas = mockSendTransaction.mock.calls[0][0].gas as bigint;
+
+		expect(oracleGas).toBeGreaterThan(plainGas);
+	});
+
+	it("encodes each multicall target individually when only some entries have an oracle configured", async () => {
+		const addr1 = "0x1111111111111111111111111111111111111111";
+		const addr2 = "0x2222222222222222222222222222222222222222";
+		const oracleAddr = "0x4444444444444444444444444444444444444444";
+
+		const mixedEnv = {
+			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
+			CHAIN_IDS: SEPOLIA_ID,
+			RPC_URLS: JSON.stringify({ [SEPOLIA_ID]: SEPOLIA_RPC }),
+			CONSENSUS_CONFIGS: JSON.stringify({
+				[SEPOLIA_ID]: [{ address: addr1 }, { address: addr2, oracle: oracleAddr }],
+			}),
+			PROPOSAL_QUEUE: undefined as unknown,
+			SAMPLE_RATE: "0",
+		} as CloudflareBindings;
+
+		const plainCallData = encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeTransaction",
+			args: [SAFE_TX],
+		});
+		const oracleCallData = encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeOracleTransaction",
+			args: [oracleAddr, "0x", SAFE_TX],
+		});
+		const expectedData = encodeFunctionData({
+			abi: multicall3Abi,
+			functionName: "aggregate3",
+			args: [
+				[
+					{ target: addr1, allowFailure: false, callData: plainCallData },
+					{ target: addr2, allowFailure: false, callData: oracleCallData },
+				],
+			],
+		});
+
+		const messages = [makeMessage()];
+		await handleQueueBatch(makeBatch(messages), mixedEnv);
+
+		expect(mockSendTransaction).toHaveBeenCalledTimes(1);
+		expect((mockSendTransaction.mock.calls[0][0].to as string).toLowerCase()).toBe(MULTICALL3_ADDRESS.toLowerCase());
+		expect(mockSendTransaction.mock.calls[0][0].data).toBe(expectedData);
+	});
 });

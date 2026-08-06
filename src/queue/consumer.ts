@@ -105,23 +105,39 @@ async function processChainMessages(
 	}
 }
 
-// Base formula: 60,000 base + 25 gas/byte, with 20% safety buffer.
-// 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (ExecutionSuccess event) + 1 (overhead)
-function estimateCallGas(callData: Hex): bigint {
-	return 60_000n + BigInt(size(callData)) * 25n;
+// Base gas requirement for proposeTransaction's onchain execution.
+const PROPOSE_TRANSACTION_GAS = 60_000n;
+// proposeOracleTransaction performs an additional call to the oracle to prepare the request.
+const ORACLE_GAS_OVERHEAD = 50_000n;
+
+// 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (event data) + 1 (overhead)
+function calldataGas(callData: Hex): bigint {
+	return BigInt(size(callData)) * 25n;
 }
 
-function encodeProposeTransaction(details: SafeTransactionWithDomain): Hex {
-	return encodeFunctionData({
+function encodeProposeCall(config: ConsensusConfig, details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
+	if (config.oracle) {
+		const data = encodeFunctionData({
+			abi: CONSENSUS_FUNCTIONS,
+			functionName: "proposeOracleTransaction",
+			args: [config.oracle, "0x", details],
+		});
+		return { data, gas: PROPOSE_TRANSACTION_GAS + ORACLE_GAS_OVERHEAD + calldataGas(data) };
+	}
+	const data = encodeFunctionData({
 		abi: CONSENSUS_FUNCTIONS,
 		functionName: "proposeTransaction",
 		args: [details],
 	});
+	return { data, gas: PROPOSE_TRANSACTION_GAS + calldataGas(data) };
 }
 
-function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
-	const data = encodeProposeTransaction(details);
-	return { data, gas: (estimateCallGas(data) * 120n) / 100n };
+function encodeSingleTransaction(
+	config: ConsensusConfig,
+	details: SafeTransactionWithDomain,
+): { data: Hex; gas: bigint } {
+	const { data, gas } = encodeProposeCall(config, details);
+	return { data, gas: (gas * 120n) / 100n };
 }
 
 function encodeMulticall(
@@ -129,10 +145,10 @@ function encodeMulticall(
 	consensusConfigs: ConsensusConfig[],
 	multicall3Address: Address,
 ): { to: Address; data: Hex; gas: bigint } {
-	// TODO(Phase 2): encode each target's callData individually via encodeProposeCall,
-	// using proposeOracleTransaction when config.oracle is set.
-	const callData = encodeProposeTransaction(details);
-	const calls = consensusConfigs.map(({ address }) => ({ target: address, allowFailure: false, callData }));
+	const calls = consensusConfigs.map((config) => {
+		const { data, gas } = encodeProposeCall(config, details);
+		return { target: config.address, allowFailure: false, callData: data, gas };
+	});
 
 	const data = encodeFunctionData({
 		abi: multicall3Abi,
@@ -140,8 +156,8 @@ function encodeMulticall(
 		args: [calls],
 	});
 
-	// Per-call cost plus multicall3 overhead, with 20% safety buffer
-	const estimated = 30_000n + estimateCallGas(callData) * BigInt(consensusConfigs.length);
+	// Sum of each target's own gas requirement plus multicall3 overhead, with 20% safety buffer
+	const estimated = 30_000n + calls.reduce((sum, call) => sum + call.gas, 0n);
 	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
 }
 
@@ -161,8 +177,7 @@ async function submitTransaction(
 	let gas: bigint;
 
 	if (consensusConfigs.length === 1) {
-		// TODO(Phase 2): use proposeOracleTransaction when consensusConfigs[0].oracle is set.
-		({ data, gas } = encodeTransaction(details));
+		({ data, gas } = encodeSingleTransaction(consensusConfigs[0], details));
 		to = consensusConfigs[0].address;
 	} else {
 		// multicall3 availability is validated at config parse time

@@ -21,19 +21,19 @@
 			]
 		},
 		// Comma-separated list of chain IDs to submit attestations to
-		"CHAIN_IDS": "100",
+		"CHAIN_IDS": "11155111",
 		"SAMPLE_RATE": "100"
 	},
 	"queues": {
 		"producers": [
 			{
-				"queue": "safenet-proposals",
+				"queue": "safenet-proposals-v2",
 				"binding": "PROPOSAL_QUEUE"
 			}
 		],
 		"consumers": [
 			{
-				"queue": "safenet-proposals",
+				"queue": "safenet-proposals-v2",
 				"max_batch_size": 10,
 				"max_batch_timeout": 5
 			}

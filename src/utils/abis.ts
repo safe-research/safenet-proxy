@@ -17,4 +17,5 @@ export const CONSENSUS_FUNCTIONS = parseAbi([
 	"function stageEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 group, bytes32 signature) external",
 	"function attestTransaction(uint64 epoch, bytes32 transactionHash, bytes32 signature) external",
 	"function proposeTransaction(SafeTransaction transaction) external returns (bytes32 transactionHash)",
+	"function proposeOracleTransaction(address oracle, bytes oracleData, SafeTransaction transaction) external returns (bytes32 transactionHash)",
 ]);
