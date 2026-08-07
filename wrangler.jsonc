@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "safenet-proxy",
+	"name": "safenet-proxy-v2",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-07-17",
 	// "compatibility_flags": [
