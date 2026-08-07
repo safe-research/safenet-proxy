@@ -108,7 +108,7 @@ async function processChainMessages(
 // Base gas requirement for proposeTransaction's onchain execution.
 const PROPOSE_TRANSACTION_GAS = 60_000n;
 // proposeOracleTransaction performs an additional call to the oracle to prepare the request.
-const ORACLE_GAS_OVERHEAD = 50_000n;
+const ORACLE_GAS_OVERHEAD = 250_000n;
 
 // 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (event data) + 1 (overhead)
 function calldataGas(callData: Hex): bigint {
