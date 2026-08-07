@@ -13,6 +13,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { supportedChains } from "../config/chains.js";
 import { configSchema } from "../config/schemas.js";
+import type { ConsensusConfig } from "../config/types.js";
 import type { SafeTransactionWithDomain } from "../safe/types.js";
 import { CONSENSUS_FUNCTIONS } from "../utils/abis.js";
 import { queueMessageSchema } from "./schemas.js";
@@ -39,7 +40,7 @@ export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: C
 			processChainMessages(
 				chainId,
 				config.RPC_URLS[String(chainId)],
-				config.CONSENSUS_ADDRESSES[String(chainId)],
+				config.CONSENSUS_CONFIGS[String(chainId)],
 				account,
 				transactions,
 			),
@@ -61,7 +62,7 @@ export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: C
 async function processChainMessages(
 	chainId: (typeof supportedChains)[number]["id"],
 	rpcUrl: string,
-	consensusAddresses: Address[],
+	consensusConfigs: ConsensusConfig[],
 	account: ReturnType<typeof privateKeyToAccount>,
 	transactions: SafeTransactionWithDomain[],
 ): Promise<void> {
@@ -86,7 +87,7 @@ async function processChainMessages(
 				walletClient,
 				chain,
 				account,
-				consensusAddresses,
+				consensusConfigs,
 				tx,
 				bufferedMaxFeePerGas,
 				maxPriorityFeePerGas,
@@ -125,11 +126,13 @@ function encodeTransaction(details: SafeTransactionWithDomain): { data: Hex; gas
 
 function encodeMulticall(
 	details: SafeTransactionWithDomain,
-	consensusAddresses: Address[],
+	consensusConfigs: ConsensusConfig[],
 	multicall3Address: Address,
 ): { to: Address; data: Hex; gas: bigint } {
+	// TODO(Phase 2): encode each target's callData individually via encodeProposeCall,
+	// using proposeOracleTransaction when config.oracle is set.
 	const callData = encodeProposeTransaction(details);
-	const calls = consensusAddresses.map((target) => ({ target, allowFailure: false, callData }));
+	const calls = consensusConfigs.map(({ address }) => ({ target: address, allowFailure: false, callData }));
 
 	const data = encodeFunctionData({
 		abi: multicall3Abi,
@@ -138,7 +141,7 @@ function encodeMulticall(
 	});
 
 	// Per-call cost plus multicall3 overhead, with 20% safety buffer
-	const estimated = 30_000n + estimateCallGas(callData) * BigInt(consensusAddresses.length);
+	const estimated = 30_000n + estimateCallGas(callData) * BigInt(consensusConfigs.length);
 	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
 }
 
@@ -146,7 +149,7 @@ async function submitTransaction(
 	client: ReturnType<typeof createWalletClient>,
 	chain: ReturnType<typeof extractChain>,
 	account: ReturnType<typeof privateKeyToAccount>,
-	consensusAddresses: Address[],
+	consensusConfigs: ConsensusConfig[],
 	details: SafeTransactionWithDomain,
 	maxFeePerGas: bigint,
 	maxPriorityFeePerGas: bigint,
@@ -157,13 +160,14 @@ async function submitTransaction(
 	let data: Hex;
 	let gas: bigint;
 
-	if (consensusAddresses.length === 1) {
+	if (consensusConfigs.length === 1) {
+		// TODO(Phase 2): use proposeOracleTransaction when consensusConfigs[0].oracle is set.
 		({ data, gas } = encodeTransaction(details));
-		to = consensusAddresses[0];
+		to = consensusConfigs[0].address;
 	} else {
 		// multicall3 availability is validated at config parse time
 		// biome-ignore lint/style/noNonNullAssertion: guaranteed by configSchema
-		({ to, data, gas } = encodeMulticall(details, consensusAddresses, chain.contracts!.multicall3!.address));
+		({ to, data, gas } = encodeMulticall(details, consensusConfigs, chain.contracts!.multicall3!.address));
 	}
 
 	const transactionHash = await client.sendTransaction({
