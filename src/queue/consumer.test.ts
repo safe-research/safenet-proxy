@@ -1,7 +1,7 @@
 import { encodeFunctionData, multicall3Abi, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { SafeTransactionWithDomain } from "../safe/types.js";
-import { CONSENSUS_FUNCTIONS } from "../utils/abis.js";
+import { BETA_CONSENSUS_FUNCTIONS, CONSENSUS_FUNCTIONS } from "../utils/abis.js";
 import { handleQueueBatch } from "./consumer.js";
 import type { QueueMessage } from "./types.js";
 
@@ -205,7 +205,7 @@ describe("handleQueueBatch", () => {
 		} as CloudflareBindings;
 
 		const proposeCallData = encodeFunctionData({
-			abi: CONSENSUS_FUNCTIONS,
+			abi: BETA_CONSENSUS_FUNCTIONS,
 			functionName: "proposeTransaction",
 			args: [SAFE_TX],
 		});
@@ -239,7 +239,7 @@ describe("handleQueueBatch", () => {
 		expect(mockSendTransaction.mock.calls[0][0].to).toBe(zeroAddress);
 	});
 
-	it("submits via proposeOracleTransaction when the single consensus entry has an oracle configured", async () => {
+	it("submits via the oracle variant of proposeTransaction when the single consensus entry has an oracle configured", async () => {
 		const consensusAddr = "0x3333333333333333333333333333333333333333";
 		const oracleAddr = "0x4444444444444444444444444444444444444444";
 
@@ -255,7 +255,7 @@ describe("handleQueueBatch", () => {
 
 		const expectedData = encodeFunctionData({
 			abi: CONSENSUS_FUNCTIONS,
-			functionName: "proposeOracleTransaction",
+			functionName: "proposeTransaction",
 			args: [oracleAddr, "0x", SAFE_TX],
 		});
 
@@ -309,13 +309,13 @@ describe("handleQueueBatch", () => {
 		} as CloudflareBindings;
 
 		const plainCallData = encodeFunctionData({
-			abi: CONSENSUS_FUNCTIONS,
+			abi: BETA_CONSENSUS_FUNCTIONS,
 			functionName: "proposeTransaction",
 			args: [SAFE_TX],
 		});
 		const oracleCallData = encodeFunctionData({
 			abi: CONSENSUS_FUNCTIONS,
-			functionName: "proposeOracleTransaction",
+			functionName: "proposeTransaction",
 			args: [oracleAddr, "0x", SAFE_TX],
 		});
 		const expectedData = encodeFunctionData({
