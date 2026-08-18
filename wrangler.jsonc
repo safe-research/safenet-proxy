@@ -15,8 +15,8 @@
 		"CONSENSUS_CONFIGS": {
 			"11155111": [
 				{
-					"address": "0x2b4c601285221c6b0942b86Eb659Efc8a4dd8120",
-					"oracle": "0x25275006cE9C4a4D5453e173D09134a24Bb44926"
+					"address": "0xc0856A2e4084212459aa9C4408962eA6Ff03bb05",
+					"oracle": "0x78C13Af7697f6fD4cCA05DED3D436Fa21308E8cE"
 				}
 			]
 		},

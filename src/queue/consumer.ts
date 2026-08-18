@@ -15,7 +15,7 @@ import { supportedChains } from "../config/chains.js";
 import { configSchema } from "../config/schemas.js";
 import type { ConsensusConfig } from "../config/types.js";
 import type { SafeTransactionWithDomain } from "../safe/types.js";
-import { CONSENSUS_FUNCTIONS } from "../utils/abis.js";
+import { BETA_CONSENSUS_FUNCTIONS, CONSENSUS_FUNCTIONS } from "../utils/abis.js";
 import { queueMessageSchema } from "./schemas.js";
 import type { QueueMessage } from "./types.js";
 
@@ -107,7 +107,7 @@ async function processChainMessages(
 
 // Base gas requirement for proposeTransaction's onchain execution.
 const PROPOSE_TRANSACTION_GAS = 60_000n;
-// proposeOracleTransaction performs an additional call to the oracle to prepare the request.
+// The oracle variant of proposeTransaction performs an additional call to the oracle to prepare the request.
 const ORACLE_GAS_OVERHEAD = 250_000n;
 
 // 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (event data) + 1 (overhead)
@@ -119,13 +119,13 @@ function encodeProposeCall(config: ConsensusConfig, details: SafeTransactionWith
 	if (config.oracle) {
 		const data = encodeFunctionData({
 			abi: CONSENSUS_FUNCTIONS,
-			functionName: "proposeOracleTransaction",
+			functionName: "proposeTransaction",
 			args: [config.oracle, "0x", details],
 		});
 		return { data, gas: PROPOSE_TRANSACTION_GAS + ORACLE_GAS_OVERHEAD + calldataGas(data) };
 	}
 	const data = encodeFunctionData({
-		abi: CONSENSUS_FUNCTIONS,
+		abi: BETA_CONSENSUS_FUNCTIONS,
 		functionName: "proposeTransaction",
 		args: [details],
 	});
