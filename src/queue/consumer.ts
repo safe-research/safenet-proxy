@@ -12,7 +12,9 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { supportedChains } from "../config/chains.js";
 import { configSchema } from "../config/schemas.js";
-import type { ConsensusConfig } from "../config/types.js";
+import type { ConsensusConfig, RelayingSafeConfig } from "../config/types.js";
+import { encodeMultiSendCall, encodeMultiSendTransactions } from "../safe/multisend.js";
+import { encodeSafeRelayTransaction, type SafeRelayCall } from "../safe/relay.js";
 import type { SafeTransactionWithDomain } from "../safe/types.js";
 import { BETA_CONSENSUS_FUNCTIONS, CONSENSUS_FUNCTIONS } from "../utils/abis.js";
 import { queueMessageSchema } from "./schemas.js";
@@ -40,6 +42,8 @@ export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: C
 				chainId,
 				config.RPC_URLS[String(chainId)],
 				config.CONSENSUS_CONFIGS[String(chainId)],
+				config.RELAYING_SAFES[String(chainId)],
+				config.MAX_BATCH_GAS,
 				account,
 				transactions,
 			),
@@ -62,6 +66,8 @@ async function processChainMessages(
 	chainId: (typeof supportedChains)[number]["id"],
 	rpcUrl: string,
 	consensusConfigs: ConsensusConfig[],
+	relayingSafe: RelayingSafeConfig | undefined,
+	maxBatchGas: bigint,
 	account: ReturnType<typeof privateKeyToAccount>,
 	transactions: SafeTransactionWithDomain[],
 ): Promise<void> {
@@ -80,8 +86,15 @@ async function processChainMessages(
 	// to getting stuck than viem's nonceManager since there is currently no retry logic.
 	const baseNonce = await publicClient.getTransactionCount({ address: account.address, blockTag: "latest" });
 
-	// One transaction per (message, consensus config) pair.
-	const submissions = transactions.flatMap((tx) => consensusConfigs.map((config) => ({ tx, config })));
+	// One inner call per (message, consensus config) pair.
+	const innerCalls = transactions.flatMap((tx) => consensusConfigs.map((config) => buildInnerCall(config, tx)));
+
+	const submissions =
+		relayingSafe !== undefined
+			? groupCallsByGasLimit(innerCalls, maxBatchGas).map((group) =>
+					encodeRelayedGroup(group, account.address, relayingSafe),
+				)
+			: innerCalls.map((call) => encodeDirectCall(call));
 
 	const results = await Promise.allSettled(
 		submissions.map((submission, index) =>
@@ -89,8 +102,9 @@ async function processChainMessages(
 				walletClient,
 				chain,
 				account,
-				submission.config,
-				submission.tx,
+				submission.to,
+				submission.data,
+				submission.gas,
 				bufferedMaxFeePerGas,
 				maxPriorityFeePerGas,
 				baseNonce + index,
@@ -111,51 +125,114 @@ async function processChainMessages(
 const PROPOSE_TRANSACTION_GAS = 60_000n;
 // The oracle variant of proposeTransaction performs an additional call to the oracle to prepare the request.
 const ORACLE_GAS_OVERHEAD = 250_000n;
+// execTransaction's own overhead: pre-validated signature verification plus dispatching the
+// inner call(s) - the same fixed overhead is charged whether execTransaction dispatches a
+// single call directly or a batch of calls via MultiSend.
+const EXEC_TRANSACTION_GAS_OVERHEAD = 100_000n;
 
 // 25 gas/byte = 16 (non-zero calldata, post-Berlin) + 8 (event data) + 1 (overhead)
 function calldataGas(callData: Hex): bigint {
 	return BigInt(size(callData)) * 25n;
 }
 
-function encodeProposeCall(config: ConsensusConfig, details: SafeTransactionWithDomain): { data: Hex; gas: bigint } {
+// Adds a 20% safety margin on top of an estimated gas requirement.
+function withGasBuffer(gas: bigint): bigint {
+	return (gas * 120n) / 100n;
+}
+
+function encodeProposeCall(
+	config: ConsensusConfig,
+	details: SafeTransactionWithDomain,
+): { data: Hex; executionGas: bigint } {
 	if (config.oracle) {
 		const data = encodeFunctionData({
 			abi: CONSENSUS_FUNCTIONS,
 			functionName: "proposeTransaction",
 			args: [config.oracle, "0x", details],
 		});
-		return { data, gas: PROPOSE_TRANSACTION_GAS + ORACLE_GAS_OVERHEAD + calldataGas(data) };
+		return { data, executionGas: PROPOSE_TRANSACTION_GAS + ORACLE_GAS_OVERHEAD };
 	}
 	const data = encodeFunctionData({
 		abi: BETA_CONSENSUS_FUNCTIONS,
 		functionName: "proposeTransaction",
 		args: [details],
 	});
-	return { data, gas: PROPOSE_TRANSACTION_GAS + calldataGas(data) };
+	return { data, executionGas: PROPOSE_TRANSACTION_GAS };
 }
 
-function encodeSingleTransaction(
-	config: ConsensusConfig,
-	details: SafeTransactionWithDomain,
-): { data: Hex; gas: bigint } {
-	const { data, gas } = encodeProposeCall(config, details);
-	return { data, gas: (gas * 120n) / 100n };
+// A single proposeTransaction call, plus the gas its own on-chain execution requires
+// (excluding any wrapping/dispatch overhead, which is charged once per top-level submission).
+type InnerCall = SafeRelayCall & { executionGas: bigint };
+
+function buildInnerCall(config: ConsensusConfig, details: SafeTransactionWithDomain): InnerCall {
+	const { data, executionGas } = encodeProposeCall(config, details);
+	return { to: config.address, value: 0n, data, executionGas };
+}
+
+function encodeDirectCall(call: InnerCall): { to: Address; data: Hex; gas: bigint } {
+	return { to: call.to, data: call.data, gas: withGasBuffer(call.executionGas + calldataGas(call.data)) };
+}
+
+// Rough calldata-gas contribution of packing `call` into a MultiSend entry (the
+// operation + to + value + length header, plus the call's own data).
+function multiSendEntryGas(call: SafeRelayCall): bigint {
+	return calldataGas(encodeMultiSendTransactions([call]));
+}
+
+// Greedily groups calls so each group's estimated gas (inner execution + MultiSend
+// packing + the fixed execTransaction dispatch overhead) stays within maxBatchGas -
+// batching whenever it fits, to minimize the number of top-level EOA transactions.
+// A call that alone already exceeds the limit is still sent by itself, since an
+// atomic on-chain call cannot be split further.
+function groupCallsByGasLimit(calls: InnerCall[], maxBatchGas: bigint): InnerCall[][] {
+	const groups: InnerCall[][] = [];
+	let current: InnerCall[] = [];
+	let currentGas = EXEC_TRANSACTION_GAS_OVERHEAD;
+
+	for (const call of calls) {
+		const callGas = call.executionGas + multiSendEntryGas(call);
+		if (current.length > 0 && currentGas + callGas > maxBatchGas) {
+			groups.push(current);
+			current = [];
+			currentGas = EXEC_TRANSACTION_GAS_OVERHEAD;
+		}
+		current.push(call);
+		currentGas += callGas;
+	}
+	if (current.length > 0) {
+		groups.push(current);
+	}
+	return groups;
+}
+
+// Wraps a group of one or more calls into a single execTransaction addressed to the
+// relaying Safe - a lone call is wrapped directly, while multiple calls are first
+// packed into one MultiSend delegatecall so they still land in a single execTransaction.
+function encodeRelayedGroup(
+	group: InnerCall[],
+	owner: Address,
+	relayingSafe: RelayingSafeConfig,
+): { to: Address; data: Hex; gas: bigint } {
+	const executionGas = group.reduce((sum, call) => sum + call.executionGas, 0n);
+	const relayedCall: SafeRelayCall = group.length === 1 ? group[0] : encodeMultiSendCall(relayingSafe.multiSend, group);
+
+	const data = encodeSafeRelayTransaction(owner, relayedCall);
+	const gas = withGasBuffer(executionGas + EXEC_TRANSACTION_GAS_OVERHEAD + calldataGas(data));
+	return { to: relayingSafe.safe, data, gas };
 }
 
 async function submitTransaction(
 	client: ReturnType<typeof createWalletClient>,
 	chain: ReturnType<typeof extractChain>,
 	account: ReturnType<typeof privateKeyToAccount>,
-	config: ConsensusConfig,
-	details: SafeTransactionWithDomain,
+	to: Address,
+	data: Hex,
+	gas: bigint,
 	maxFeePerGas: bigint,
 	maxPriorityFeePerGas: bigint,
 	nonce: number,
 	chainId: number,
 ): Promise<void> {
-	const { data, gas } = encodeSingleTransaction(config, details);
-	const to: Address = config.address;
-
 	const transactionHash = await client.sendTransaction({
 		chain,
 		account,

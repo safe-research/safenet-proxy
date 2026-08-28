@@ -270,3 +270,23 @@ describe("configSchema — RELAYING_SAFES", () => {
 		expect(result.RELAYING_SAFES).toEqual({});
 	});
 });
+
+describe("configSchema — MAX_BATCH_GAS", () => {
+	it("defaults to 5,000,000 when omitted", () => {
+		const result = configSchema.parse(BASE_ENV);
+		expect(result.MAX_BATCH_GAS).toBe(5_000_000n);
+	});
+
+	it("parses a custom value as a bigint", () => {
+		const result = configSchema.parse({ ...BASE_ENV, MAX_BATCH_GAS: "2500000" });
+		expect(result.MAX_BATCH_GAS).toBe(2_500_000n);
+	});
+
+	it("rejects a negative value", () => {
+		expect(() => configSchema.parse({ ...BASE_ENV, MAX_BATCH_GAS: "-1" })).toThrow();
+	});
+
+	it("rejects a non-numeric value", () => {
+		expect(() => configSchema.parse({ ...BASE_ENV, MAX_BATCH_GAS: "not-a-number" })).toThrow();
+	});
+});
