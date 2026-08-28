@@ -7,9 +7,11 @@
 	//   "nodejs_compat"
 	// ],
 	// Secrets (set via `wrangler secret put`):
-	//   PRIVATE_KEY  — hex-encoded private key used to sign transactions on all chains
-	//   RPC_URLS     — JSON string mapping chain ID to RPC URL, e.g. {"11155111":"https://...","100":"https://..."}
-	//   SAFE_API_KEY — API Key for the Safe API
+	//   PRIVATE_KEY    — hex-encoded private key used to sign transactions on all chains
+	//   RPC_URLS       — JSON string mapping chain ID to RPC URL, e.g. {"11155111":"https://...","100":"https://..."}
+	//   SAFE_API_KEY   — API Key for the Safe API
+	//   RELAYING_SAFES — JSON string mapping chain ID to a relaying Safe config ({safe, multiSend} addresses),
+	//                    e.g. {"11155111":{"safe":"0x...","multiSend":"0x..."},"100":{"safe":"0x...","multiSend":"0x..."}}
 	"vars": {
 		// Mapping of chain ID to a list of consensus configs (address + optional oracle)
 		"CONSENSUS_CONFIGS": {

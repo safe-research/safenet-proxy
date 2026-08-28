@@ -24,6 +24,13 @@ echo '{"11155111":"https://sepolia.infura.io/v3/...","100":"https://rpc.gnosisch
 # unless a config entry sets an oracle, in which case it is submitted via the oracle instead.
 echo '{"11155111":[{"address":"0xAbc..."}],"100":[{"address":"0xDef..."},{"address":"0x123...","oracle":"0x456..."}]}' \
   | npm exec -- wrangler secret put CONSENSUS_CONFIGS
+
+# JSON object mapping chain ID → relaying Safe config (Safe address + its
+# MultiSend contract address on that chain). Each relaying Safe must have
+# PRIVATE_KEY's account as an owner with threshold 1, and must be funded on
+# its chain to cover oracle fees.
+echo '{"11155111":{"safe":"0xAbc...","multiSend":"0x123..."},"100":{"safe":"0xDef...","multiSend":"0x456..."}}' \
+  | npm exec -- wrangler secret put RELAYING_SAFES
 ```
 
 [For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):

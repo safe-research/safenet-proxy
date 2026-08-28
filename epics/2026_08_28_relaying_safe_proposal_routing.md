@@ -33,7 +33,7 @@ Multicall3 batching is dropped entirely: once every proposal is wrapped in its o
 
 ### Alternatives Considered
 
-- **Keep multicall3, but call it from inside the Safe via `delegatecall`.** This would preserve `msg.sender == relayingSafe` for a batched call. Rejected: Safe `operation = 1` (delegatecall) transactions can clobber the Safe's own storage and are broadly considered unsafe unless the target contract is purpose-built for delegatecall; not worth the risk to save one top-level transaction per batch.
+- **Keep multicall3, but call it from inside the Safe via `delegatecall`.** This would preserve `msg.sender == relayingSafe` for a batched call. Rejected: Safe `operation = 1` (delegatecall) transactions can clobber the Safe's own storage and are broadly considered unsafe unless the target contract is purpose-built for delegatecall — multicall3 is not. Instead, each `RELAYING_SAFES` entry configures a per-chain Safe `MultiSend` contract address alongside the Safe address: `MultiSend` *is* purpose-built for this (it never writes storage, only loops over calls), so it lets a batch of wrapped `proposeTransaction` calls still land in a single `execTransaction` without the storage-clobbering risk multicall3-via-delegatecall would carry.
 - **Keep using the Safe Transaction Service (propose + confirm) even though threshold is 1.** Rejected: adds an external dependency and network round-trip for a case where a single local signature already satisfies the Safe's threshold on-chain — `execTransaction` can be called directly.
 - **Fund the raw EOA directly instead of introducing a Safe.** Rejected per the explicit requirement that transactions be proposed via a Safe that holds the funds, which keeps the hot signing key from also being a custody target.
 
@@ -43,7 +43,7 @@ Multicall3 batching is dropped entirely: once every proposal is wrapped in its o
 
 - **New Safe ABI functions** (`src/utils/abis.ts`): `execTransaction`, `nonce()`, and `getOwners()` / `getThreshold()` for a runtime sanity check.
 - **Signing**: `execTransaction` needs a signature over the Safe's EIP-712 `SafeTx` typehash. With a single threshold-1 owner, one EOA signature (via `signTypedData`) is sufficient; no signature aggregation is needed.
-- **New config — `RELAYING_SAFES`**: `chainId -> Safe address`, following the same `jsonStringToRecord(checkedAddressSchema)` pattern as `RPC_URLS`, with the same cross-field validation requiring an entry for every configured chain.
+- **New config — `RELAYING_SAFES`**: `chainId -> { safe, multiSend }` (both `checkedAddressSchema`), following the same `jsonStringToRecord` pattern as `RPC_URLS`, but optional per chain (unlike `RPC_URLS`/`CONSENSUS_CONFIGS`) — a chain with no entry falls back to the current direct-call behavior instead of failing config validation. This lets chains adopt a relaying Safe incrementally. `multiSend` is the chain's deployed Safe `MultiSend` contract address, stored alongside `safe` so Phase 4 can batch multiple wrapped calls into a single `execTransaction` via `MultiSend`.
 - **Runtime invariant check**: before use, confirm the configured relaying Safe has threshold `1` and that the operator account is among its owners; log and skip that chain's submissions on violation, consistent with the existing error-tolerant pattern in `consumer.ts` (log + continue, no retries).
 - **Nonce handling**: the relaying Safe has its own on-chain nonce namespace, separate from the EOA's transaction nonce. It needs to be fetched and incremented per batch the same way `baseNonce` is handled today for the EOA.
 - **Gas estimation**: current flat constants (`PROPOSE_TRANSACTION_GAS`, `ORACLE_GAS_OVERHEAD`) size the inner consensus call only; they need a further fixed overhead added for the wrapping `execTransaction` (signature verification + inner call dispatch).
@@ -71,7 +71,7 @@ Multicall3 batching is dropped entirely: once every proposal is wrapped in its o
 ### Phase 3 — Relaying Safe configuration
 *Independent PR, config-only. Can run in parallel with Phases 1 and 2.*
 
-- `src/config/schemas.ts`: add `RELAYING_SAFES` (`jsonStringToRecord(checkedAddressSchema)`) plus cross-field validation requiring an entry per configured chain.
+- `src/config/schemas.ts`: add `RELAYING_SAFES` (`jsonStringToRecord(relayingSafeConfigSchema)`, defaulting to `{}`, where `relayingSafeConfigSchema` is `{ safe: checkedAddressSchema, multiSend: checkedAddressSchema }`) — no cross-field requirement; a missing entry for a chain is valid and means that chain has no relaying Safe configured.
 - `.dev.vars.sample`, `README.md`: document the new secret.
 - `src/config/schemas.test.ts`: cover parsing and validation errors for the new field.
 - No behavioral change — the config is parsed but unused until Phase 4.
@@ -79,7 +79,7 @@ Multicall3 batching is dropped entirely: once every proposal is wrapped in its o
 ### Phase 4 — Route proposals through the relaying Safe
 *Depends on Phases 1–3 being merged first.*
 
-- `src/queue/consumer.ts`: build the inner `proposeTransaction` calldata as today (minus multicall), then use Phase 2's relay helper to wrap it as an `execTransaction` call to `RELAYING_SAFES[chainId]`, signed by the operator account, instead of sending directly to the consensus contract.
+- `src/queue/consumer.ts`: build the inner `proposeTransaction` calldata as today (minus multicall), then use Phase 2's relay helper to wrap it as an `execTransaction` call to `RELAYING_SAFES[chainId]`, signed by the operator account, instead of sending directly to the consensus contract. If a chain has no `RELAYING_SAFES` entry, fall back to sending the `proposeTransaction` call directly (today's behavior) rather than skipping the chain.
 - Add the runtime owner/threshold sanity check from the Tech Specs against the configured relaying Safe.
 - Update gas estimation constants to include `execTransaction` overhead.
 - Update `consumer.test.ts` cases (direct-address send, oracle gas overhead, etc.) to assert calls now target the relaying Safe with `execTransaction` calldata wrapping the inner `proposeTransaction` call.
@@ -93,6 +93,7 @@ Multicall3 batching is dropped entirely: once every proposal is wrapped in its o
 ## Open Questions and Assumptions
 
 - **Granularity of `RELAYING_SAFES`**: assumed one relaying Safe per chain, matching the granularity of `RPC_URLS`. If different consensus configs on the same chain need isolated fee funding, `RELAYING_SAFES` would instead need to key off consensus config rather than chain.
+- **Use of `multiSend` in Phase 4**: Phase 3 only stores the per-chain `MultiSend` address; whether Phase 4 actually batches multiple wrapped `proposeTransaction` calls into one `execTransaction` via `MultiSend`, or keeps sending one `execTransaction` per call and holds `multiSend` in reserve, is a Phase 4 design decision.
 - **Invariant check frequency**: assumed checking the relaying Safe's threshold/owner status once per cold start (cached) rather than on every batch, to avoid an extra RPC round-trip per invocation; needs confirmation.
 - **Relaying Safe nonce source**: assumed fetched fresh via `nonce()` per batch (mirroring the current `getTransactionCount` pattern for the EOA), assuming no other party submits transactions through the same relaying Safe concurrently.
 - **Funding operations**: which relaying Safe(s) get funded, on which chains, and with what token for oracle fees is an operational concern out of scope for this epic, but the funding requirement must be documented in the README.
