@@ -20,9 +20,8 @@ echo '{"11155111":"https://sepolia.infura.io/v3/...","100":"https://rpc.gnosisch
   | npm exec -- wrangler secret put RPC_URLS
 
 # JSON object mapping chain ID → list of consensus configs (address + optional oracle).
-# Each safe transaction is proposed to all addresses in the list via a
-# single multicall3 transaction, unless a config entry sets an oracle,
-# in which case it is submitted via the oracle instead.
+# Each safe transaction is proposed individually to every address in the list,
+# unless a config entry sets an oracle, in which case it is submitted via the oracle instead.
 echo '{"11155111":[{"address":"0xAbc..."}],"100":[{"address":"0xDef..."},{"address":"0x123...","oracle":"0x456..."}]}' \
   | npm exec -- wrangler secret put CONSENSUS_CONFIGS
 ```

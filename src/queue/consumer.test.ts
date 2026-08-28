@@ -1,4 +1,4 @@
-import { encodeFunctionData, multicall3Abi, zeroAddress } from "viem";
+import { encodeFunctionData, zeroAddress } from "viem";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { SafeTransactionWithDomain } from "../safe/types.js";
 import { BETA_CONSENSUS_FUNCTIONS, CONSENSUS_FUNCTIONS } from "../utils/abis.js";
@@ -22,7 +22,6 @@ const VALID_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae7
 const TEST_API_KEY = "some_random_api_key";
 const SEPOLIA_RPC = "https://sepolia.example.com";
 const SEPOLIA_ID = "11155111";
-const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
 const ENV = {
 	PRIVATE_KEY: VALID_PRIVATE_KEY,
@@ -190,7 +189,7 @@ describe("handleQueueBatch", () => {
 		expect(nonces).toEqual([7, 8, 9]);
 	});
 
-	it("sends a single multicall transaction when multiple consensus addresses are configured", async () => {
+	it("submits one transaction per consensus config for each message, with sequential nonces", async () => {
 		const addr1 = "0x1111111111111111111111111111111111111111";
 		const addr2 = "0x2222222222222222222222222222222222222222";
 
@@ -204,30 +203,18 @@ describe("handleQueueBatch", () => {
 			SAMPLE_RATE: "0",
 		} as CloudflareBindings;
 
-		const proposeCallData = encodeFunctionData({
-			abi: BETA_CONSENSUS_FUNCTIONS,
-			functionName: "proposeTransaction",
-			args: [SAFE_TX],
-		});
-		const expectedData = encodeFunctionData({
-			abi: multicall3Abi,
-			functionName: "aggregate3",
-			args: [
-				[
-					{ target: addr1, allowFailure: false, callData: proposeCallData },
-					{ target: addr2, allowFailure: false, callData: proposeCallData },
-				],
-			],
-		});
+		mockGetTransactionCount.mockResolvedValue(7);
 
-		const messages = [makeMessage()];
+		// 2 queue messages x 2 consensus configs = 4 sends
+		const messages = [makeMessage(), makeMessage()];
 		await handleQueueBatch(makeBatch(messages), multiAddressEnv);
 
-		// One sendTransaction call (not two), targeting the multicall3 contract with encoded aggregate3 data
-		expect(mockSendTransaction).toHaveBeenCalledTimes(1);
-		expect((mockSendTransaction.mock.calls[0][0].to as string).toLowerCase()).toBe(MULTICALL3_ADDRESS.toLowerCase());
-		expect(mockSendTransaction.mock.calls[0][0].data).toBe(expectedData);
+		expect(mockSendTransaction).toHaveBeenCalledTimes(4);
+		const calls = mockSendTransaction.mock.calls.map((args) => args[0] as { to: string; nonce: number });
+		expect(calls.map((c) => c.to)).toEqual([addr1, addr2, addr1, addr2]);
+		expect(calls.map((c) => c.nonce)).toEqual([7, 8, 9, 10]);
 		expect(messages[0].ack).toHaveBeenCalledOnce();
+		expect(messages[1].ack).toHaveBeenCalledOnce();
 	});
 
 	it("sends directly to the consensus address when only one is configured", async () => {
@@ -291,7 +278,7 @@ describe("handleQueueBatch", () => {
 		expect(oracleGas).toBeGreaterThan(plainGas);
 	});
 
-	it("encodes each multicall target individually when only some entries have an oracle configured", async () => {
+	it("encodes each consensus config's transaction individually when only some entries have an oracle configured", async () => {
 		const addr1 = "0x1111111111111111111111111111111111111111";
 		const addr2 = "0x2222222222222222222222222222222222222222";
 		const oracleAddr = "0x4444444444444444444444444444444444444444";
@@ -318,22 +305,14 @@ describe("handleQueueBatch", () => {
 			functionName: "proposeTransaction",
 			args: [oracleAddr, "0x", SAFE_TX],
 		});
-		const expectedData = encodeFunctionData({
-			abi: multicall3Abi,
-			functionName: "aggregate3",
-			args: [
-				[
-					{ target: addr1, allowFailure: false, callData: plainCallData },
-					{ target: addr2, allowFailure: false, callData: oracleCallData },
-				],
-			],
-		});
 
 		const messages = [makeMessage()];
 		await handleQueueBatch(makeBatch(messages), mixedEnv);
 
-		expect(mockSendTransaction).toHaveBeenCalledTimes(1);
-		expect((mockSendTransaction.mock.calls[0][0].to as string).toLowerCase()).toBe(MULTICALL3_ADDRESS.toLowerCase());
-		expect(mockSendTransaction.mock.calls[0][0].data).toBe(expectedData);
+		expect(mockSendTransaction).toHaveBeenCalledTimes(2);
+		expect(mockSendTransaction.mock.calls[0][0].to).toBe(addr1);
+		expect(mockSendTransaction.mock.calls[0][0].data).toBe(plainCallData);
+		expect(mockSendTransaction.mock.calls[1][0].to).toBe(addr2);
+		expect(mockSendTransaction.mock.calls[1][0].data).toBe(oracleCallData);
 	});
 });
