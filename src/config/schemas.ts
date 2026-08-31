@@ -14,12 +14,18 @@ export const consensusConfigSchema = z.object({
 	oracle: checkedAddressSchema.optional(),
 });
 
+export const relayingSafeConfigSchema = z.object({
+	safe: checkedAddressSchema,
+	multiSend: checkedAddressSchema,
+});
+
 export const configSchema = z
 	.object({
 		PRIVATE_KEY: hexDataSchema,
 		SAFE_API_KEY: z.string(),
 		RPC_URLS: jsonStringToRecord(z.url()),
 		CONSENSUS_CONFIGS: jsonStringToRecord(z.array(consensusConfigSchema).nonempty()),
+		RELAYING_SAFES: jsonStringToRecord(relayingSafeConfigSchema).default({}),
 		CHAIN_IDS: z.preprocess((val) => {
 			const str = typeof val === "string" ? val : "11155111";
 			return str.split(",").map((s) => s.trim());

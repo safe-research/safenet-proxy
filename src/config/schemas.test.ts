@@ -6,12 +6,14 @@ const TEST_API_KEY = "some_random_api_key";
 const SEPOLIA_RPC = "https://sepolia.example.com";
 // Checksummed zero address accepted by checkedAddressSchema
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const RELAYING_SAFE_ENTRY = { safe: ZERO_ADDRESS, multiSend: ZERO_ADDRESS };
 
 const BASE_ENV = {
 	PRIVATE_KEY: VALID_PRIVATE_KEY,
 	SAFE_API_KEY: TEST_API_KEY,
 	RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC }),
 	CONSENSUS_CONFIGS: JSON.stringify({ "11155111": [{ address: ZERO_ADDRESS }] }),
+	RELAYING_SAFES: JSON.stringify({ "11155111": RELAYING_SAFE_ENTRY }),
 };
 
 describe("configSchema — CHAIN_IDS", () => {
@@ -35,6 +37,7 @@ describe("configSchema — CHAIN_IDS", () => {
 				"11155111": [{ address: ZERO_ADDRESS }],
 				"100": [{ address: ZERO_ADDRESS }],
 			}),
+			RELAYING_SAFES: JSON.stringify({ "11155111": RELAYING_SAFE_ENTRY, "100": RELAYING_SAFE_ENTRY }),
 		});
 		expect(result.CHAIN_IDS).toEqual([11155111, 100]);
 	});
@@ -160,6 +163,7 @@ describe("configSchema — cross-field validation", () => {
 					"11155111": [{ address: ZERO_ADDRESS }],
 					"100": [{ address: ZERO_ADDRESS }],
 				}),
+				RELAYING_SAFES: JSON.stringify({ "11155111": RELAYING_SAFE_ENTRY, "100": RELAYING_SAFE_ENTRY }),
 			}),
 		).toThrow(/RPC_URLS missing entry for chain 100/);
 	});
@@ -172,6 +176,7 @@ describe("configSchema — cross-field validation", () => {
 				CHAIN_IDS: "11155111,100",
 				RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": SEPOLIA_RPC }),
 				CONSENSUS_CONFIGS: JSON.stringify({ "11155111": [{ address: ZERO_ADDRESS }] }), // 100 missing
+				RELAYING_SAFES: JSON.stringify({ "11155111": RELAYING_SAFE_ENTRY, "100": RELAYING_SAFE_ENTRY }),
 			}),
 		).toThrow(/CONSENSUS_CONFIGS missing entry for chain 100/);
 	});
@@ -186,5 +191,82 @@ describe("configSchema — cross-field validation", () => {
 			CONSENSUS_CONFIGS: JSON.stringify({ "31337": [{ address: ZERO_ADDRESS }, { address: ZERO_ADDRESS }] }),
 		});
 		expect(result.CONSENSUS_CONFIGS["31337"]).toHaveLength(2);
+	});
+
+	it("succeeds when RELAYING_SAFES is missing an entry for a chain in CHAIN_IDS", () => {
+		const result = configSchema.parse({
+			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
+			CHAIN_IDS: "11155111,100",
+			RPC_URLS: JSON.stringify({ "11155111": SEPOLIA_RPC, "100": SEPOLIA_RPC }),
+			CONSENSUS_CONFIGS: JSON.stringify({
+				"11155111": [{ address: ZERO_ADDRESS }],
+				"100": [{ address: ZERO_ADDRESS }],
+			}),
+			RELAYING_SAFES: JSON.stringify({ "11155111": RELAYING_SAFE_ENTRY }), // 100 missing — falls back to a direct call
+		});
+		expect(result.RELAYING_SAFES).toEqual({ "11155111": RELAYING_SAFE_ENTRY });
+	});
+});
+
+describe("configSchema — RELAYING_SAFES", () => {
+	it("parses a valid JSON string and checksums the safe and multiSend addresses", () => {
+		const safe = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
+		const multiSend = "0x6b175474e89094c44da98b954eedeac495271d0f";
+		const result = configSchema.parse({
+			...BASE_ENV,
+			RELAYING_SAFES: JSON.stringify({ "11155111": { safe, multiSend } }),
+		});
+		expect(result.RELAYING_SAFES).toEqual({
+			"11155111": {
+				safe: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+				multiSend: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+			},
+		});
+	});
+
+	it("accepts an already-parsed object (non-string pass-through)", () => {
+		const result = configSchema.parse({
+			...BASE_ENV,
+			RELAYING_SAFES: { "11155111": RELAYING_SAFE_ENTRY },
+		});
+		expect(result.RELAYING_SAFES).toEqual({ "11155111": RELAYING_SAFE_ENTRY });
+	});
+
+	it("rejects malformed JSON", () => {
+		expect(() => configSchema.parse({ ...BASE_ENV, RELAYING_SAFES: "not json" })).toThrow();
+	});
+
+	it("rejects an entry with an invalid safe address", () => {
+		expect(() =>
+			configSchema.parse({
+				...BASE_ENV,
+				RELAYING_SAFES: JSON.stringify({ "11155111": { safe: "not-an-address", multiSend: ZERO_ADDRESS } }),
+			}),
+		).toThrow();
+	});
+
+	it("rejects an entry with an invalid multiSend address", () => {
+		expect(() =>
+			configSchema.parse({
+				...BASE_ENV,
+				RELAYING_SAFES: JSON.stringify({ "11155111": { safe: ZERO_ADDRESS, multiSend: "not-an-address" } }),
+			}),
+		).toThrow();
+	});
+
+	it("rejects an entry missing the multiSend address", () => {
+		expect(() =>
+			configSchema.parse({
+				...BASE_ENV,
+				RELAYING_SAFES: JSON.stringify({ "11155111": { safe: ZERO_ADDRESS } }),
+			}),
+		).toThrow();
+	});
+
+	it("defaults to an empty record when omitted entirely", () => {
+		const { RELAYING_SAFES, ...envWithoutRelayingSafes } = BASE_ENV;
+		const result = configSchema.parse(envWithoutRelayingSafes);
+		expect(result.RELAYING_SAFES).toEqual({});
 	});
 });
