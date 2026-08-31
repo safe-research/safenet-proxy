@@ -31,20 +31,11 @@ export const configSchema = z
 			if (config.RPC_URLS[String(id)] === undefined) {
 				ctx.addIssue({ code: "custom", message: `RPC_URLS missing entry for chain ${id}` });
 			}
-			const consensusConfigs = config.CONSENSUS_CONFIGS[String(id)];
-			if (consensusConfigs === undefined) {
+			if (config.CONSENSUS_CONFIGS[String(id)] === undefined) {
 				ctx.addIssue({
 					code: "custom",
 					message: `CONSENSUS_CONFIGS missing entry for chain ${id}`,
 				});
-			} else if (consensusConfigs.length > 1) {
-				const chain = supportedChains.find((c) => c.id === id);
-				if (!chain?.contracts?.multicall3?.address) {
-					ctx.addIssue({
-						code: "custom",
-						message: `Chain ${id} has multiple CONSENSUS_CONFIGS but does not support multicall3`,
-					});
-				}
 			}
 		}
 	});

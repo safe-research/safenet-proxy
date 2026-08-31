@@ -176,16 +176,15 @@ describe("configSchema — cross-field validation", () => {
 		).toThrow(/CONSENSUS_CONFIGS missing entry for chain 100/);
 	});
 
-	it("fails when multiple consensus configs are given for a chain without multicall3", () => {
+	it("accepts multiple consensus configs for a chain without multicall3 support", () => {
 		// Anvil (31337) does not have multicall3 configured
-		expect(() =>
-			configSchema.parse({
-				PRIVATE_KEY: VALID_PRIVATE_KEY,
-				SAFE_API_KEY: TEST_API_KEY,
-				CHAIN_IDS: "31337",
-				RPC_URLS: JSON.stringify({ "31337": SEPOLIA_RPC }),
-				CONSENSUS_CONFIGS: JSON.stringify({ "31337": [{ address: ZERO_ADDRESS }, { address: ZERO_ADDRESS }] }),
-			}),
-		).toThrow(/does not support multicall3/);
+		const result = configSchema.parse({
+			PRIVATE_KEY: VALID_PRIVATE_KEY,
+			SAFE_API_KEY: TEST_API_KEY,
+			CHAIN_IDS: "31337",
+			RPC_URLS: JSON.stringify({ "31337": SEPOLIA_RPC }),
+			CONSENSUS_CONFIGS: JSON.stringify({ "31337": [{ address: ZERO_ADDRESS }, { address: ZERO_ADDRESS }] }),
+		});
+		expect(result.CONSENSUS_CONFIGS["31337"]).toHaveLength(2);
 	});
 });

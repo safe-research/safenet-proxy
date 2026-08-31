@@ -7,7 +7,6 @@ import {
 	extractChain,
 	type Hex,
 	http,
-	multicall3Abi,
 	size,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -81,14 +80,17 @@ async function processChainMessages(
 	// to getting stuck than viem's nonceManager since there is currently no retry logic.
 	const baseNonce = await publicClient.getTransactionCount({ address: account.address, blockTag: "latest" });
 
+	// One transaction per (message, consensus config) pair.
+	const submissions = transactions.flatMap((tx) => consensusConfigs.map((config) => ({ tx, config })));
+
 	const results = await Promise.allSettled(
-		transactions.map((tx, index) =>
+		submissions.map((submission, index) =>
 			submitTransaction(
 				walletClient,
 				chain,
 				account,
-				consensusConfigs,
-				tx,
+				submission.config,
+				submission.tx,
 				bufferedMaxFeePerGas,
 				maxPriorityFeePerGas,
 				baseNonce + index,
@@ -140,50 +142,19 @@ function encodeSingleTransaction(
 	return { data, gas: (gas * 120n) / 100n };
 }
 
-function encodeMulticall(
-	details: SafeTransactionWithDomain,
-	consensusConfigs: ConsensusConfig[],
-	multicall3Address: Address,
-): { to: Address; data: Hex; gas: bigint } {
-	const calls = consensusConfigs.map((config) => {
-		const { data, gas } = encodeProposeCall(config, details);
-		return { target: config.address, allowFailure: false, callData: data, gas };
-	});
-
-	const data = encodeFunctionData({
-		abi: multicall3Abi,
-		functionName: "aggregate3",
-		args: [calls],
-	});
-
-	// Sum of each target's own gas requirement plus multicall3 overhead, with 20% safety buffer
-	const estimated = 30_000n + calls.reduce((sum, call) => sum + call.gas, 0n);
-	return { to: multicall3Address, data, gas: (estimated * 120n) / 100n };
-}
-
 async function submitTransaction(
 	client: ReturnType<typeof createWalletClient>,
 	chain: ReturnType<typeof extractChain>,
 	account: ReturnType<typeof privateKeyToAccount>,
-	consensusConfigs: ConsensusConfig[],
+	config: ConsensusConfig,
 	details: SafeTransactionWithDomain,
 	maxFeePerGas: bigint,
 	maxPriorityFeePerGas: bigint,
 	nonce: number,
 	chainId: number,
 ): Promise<void> {
-	let to: Address;
-	let data: Hex;
-	let gas: bigint;
-
-	if (consensusConfigs.length === 1) {
-		({ data, gas } = encodeSingleTransaction(consensusConfigs[0], details));
-		to = consensusConfigs[0].address;
-	} else {
-		// multicall3 availability is validated at config parse time
-		// biome-ignore lint/style/noNonNullAssertion: guaranteed by configSchema
-		({ to, data, gas } = encodeMulticall(details, consensusConfigs, chain.contracts!.multicall3!.address));
-	}
+	const { data, gas } = encodeSingleTransaction(config, details);
+	const to: Address = config.address;
 
 	const transactionHash = await client.sendTransaction({
 		chain,
