@@ -25,6 +25,8 @@
 		// Comma-separated list of chain IDs to submit attestations to
 		"CHAIN_IDS": "11155111",
 		"SAMPLE_RATE": "100"
+		// MAX_BATCH_GAS — maximum gas for a single batched execTransaction submitted through a
+		// relaying Safe (defaults to 5000000 if unset), to stay clear of the chain's block gas limit
 	},
 	"queues": {
 		"producers": [

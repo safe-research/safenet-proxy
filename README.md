@@ -26,9 +26,17 @@ echo '{"11155111":[{"address":"0xAbc..."}],"100":[{"address":"0xDef..."},{"addre
   | npm exec -- wrangler secret put CONSENSUS_CONFIGS
 
 # JSON object mapping chain ID → relaying Safe config (Safe address + its
-# MultiSend contract address on that chain). Each relaying Safe must have
-# PRIVATE_KEY's account as an owner with threshold 1, and must be funded on
-# its chain to cover oracle fees.
+# MultiSend contract address on that chain). When set for a chain,
+# every proposal on that chain is routed through the Safe's execTransaction
+# instead of calling the consensus contract directly, so the Safe (not
+# PRIVATE_KEY's account) is the onchain proposer and fee payer. Each relaying
+# Safe must have PRIVATE_KEY's account as an owner with threshold 1, and must
+# be funded on its chain to cover oracle fees. A chain with no entry here
+# falls back to calling the consensus contract directly. Proposals routed
+# through a relaying Safe are batched into as few execTransaction calls as
+# possible via the Safe's MultiSend contract, capped by MAX_BATCH_GAS (a
+# non-secret var, defaults to 5,000,000 gas — see wrangler.jsonc) to stay
+# clear of the chain's block gas limit.
 echo '{"11155111":{"safe":"0xAbc...","multiSend":"0x123..."},"100":{"safe":"0xDef...","multiSend":"0x456..."}}' \
   | npm exec -- wrangler secret put RELAYING_SAFES
 ```
