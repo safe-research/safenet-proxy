@@ -15,15 +15,15 @@
 	"vars": {
 		// Mapping of chain ID to a list of consensus configs (address + optional oracle)
 		"CONSENSUS_CONFIGS": {
-			"11155111": [
+			"100": [
 				{
-					"address": "0x23561B7209C0fCa401B4F6DabEDE9d3685de5020",
-					"oracle": "0xB2C7711b887Cc1f867768bE224f85ad30bB6da68"
+					"address": "0x98810887769db19A0Df9bf2f44E4998856fcb390",
+					"oracle": "0x544F12bAd6FF72564abBc7eA6494A2a4BdD0DDD0"
 				}
 			]
 		},
 		// Comma-separated list of chain IDs to submit attestations to
-		"CHAIN_IDS": "11155111",
+		"CHAIN_IDS": "100",
 		"SAMPLE_RATE": "5"
 		// MAX_BATCH_GAS — maximum gas for a single batched execTransaction submitted through a
 		// relaying Safe (defaults to 5000000 if unset), to stay clear of the chain's block gas limit
