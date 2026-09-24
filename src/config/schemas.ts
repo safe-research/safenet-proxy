@@ -1,4 +1,5 @@
 import z from "zod";
+import { transactionEventTypeSchema } from "../safe/schemas.js";
 import { bigintStringSchema, checkedAddressSchema, hexDataSchema } from "../utils/schemas.js";
 import { supportedChains } from "./chains.js";
 
@@ -31,6 +32,8 @@ export const configSchema = z
 			return str.split(",").map((s) => s.trim());
 		}, z.array(supportedChainsSchema)),
 		SAMPLE_RATE: z.coerce.number().default(10),
+		// Safe transaction service webhook type that should be processed.
+		WEBHOOK_TYPE: transactionEventTypeSchema.default("EXECUTED_MULTISIG_TRANSACTION"),
 		// Maximum gas for a single batched execTransaction submitted through a relaying Safe,
 		// to stay well clear of the chain's block gas limit. Proposals are packed into as few
 		// MultiSend batches as fit under this limit.
