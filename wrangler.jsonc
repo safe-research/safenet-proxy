@@ -24,7 +24,10 @@
 		},
 		// Comma-separated list of chain IDs to submit attestations to
 		"CHAIN_IDS": "100",
-		"SAMPLE_RATE": "5"
+		"SAMPLE_RATE": "5",
+		// Safe webhook type to react to
+		// (EXECUTED_MULTISIG_TRANSACTION or PENDING_MULTISIG_TRANSACTION; defaults to EXECUTED_MULTISIG_TRANSACTION if unset)
+		"WEBHOOK_TYPE": "PENDING_MULTISIG_TRANSACTION"
 		// MAX_BATCH_GAS — maximum gas for a single batched execTransaction submitted through a
 		// relaying Safe (defaults to 5000000 if unset), to stay clear of the chain's block gas limit
 	},

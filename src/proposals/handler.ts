@@ -1,12 +1,10 @@
 import type { Context } from "hono";
+import { type Address, isAddressEqual } from "viem";
+import { enabledSafes } from "../config/safes.js";
 import { configSchema } from "../config/schemas.js";
 import type { Config } from "../config/types.js";
 import type { QueueMessage } from "../queue/types.js";
-import {
-	safeTransactionWithDomain,
-	type TransactionExecutedEvent,
-	transactionExecutedEventSchema,
-} from "../safe/schemas.js";
+import { safeTransactionWithDomain, type TransactionEvent, transactionEventSchema } from "../safe/schemas.js";
 import { transactionDetails } from "../safe/service.js";
 import { handleError } from "../utils/errors.js";
 
@@ -22,8 +20,12 @@ export const handleProposal = async (
 			return c.body(null, 202);
 		}
 
-		const request = transactionExecutedEventSchema.safeParse(await c.req.json());
-		if (!request.success) {
+		const request = transactionEventSchema.safeParse(await c.req.json());
+		if (
+			!request.success ||
+			!isWebhookTypeEnabled(config, request.data.type) ||
+			(sampled && !isSafeEnabled(request.data.address))
+		) {
 			return c.body(null, 202);
 		}
 
@@ -50,7 +52,7 @@ export const handleTx = async (
 		}
 
 		const request = safeTransactionWithDomain.safeParse(await c.req.json());
-		if (!request.success) {
+		if (!request.success || (sampled && !isSafeEnabled(request.data.safe))) {
 			return c.body(null, 202);
 		}
 
@@ -69,10 +71,18 @@ export const handleTx = async (
 	}
 };
 
+function isWebhookTypeEnabled(config: Config, type: TransactionEvent["type"]): boolean {
+	return config.WEBHOOK_TYPE === type;
+}
+
+function isSafeEnabled(safe: Address): boolean {
+	return enabledSafes.length === 0 || enabledSafes.some((enabledSafe) => isAddressEqual(enabledSafe, safe));
+}
+
 async function processProposalAsync(
 	config: Config,
 	queue: Queue<QueueMessage>,
-	event: TransactionExecutedEvent,
+	event: TransactionEvent,
 ): Promise<void> {
 	try {
 		const details = await transactionDetails(config.SAFE_API_KEY, event.chainId, event.safeTxHash);

@@ -290,3 +290,19 @@ describe("configSchema — MAX_BATCH_GAS", () => {
 		expect(() => configSchema.parse({ ...BASE_ENV, MAX_BATCH_GAS: "not-a-number" })).toThrow();
 	});
 });
+
+describe("configSchema — WEBHOOK_TYPE", () => {
+	it("defaults to executed transactions when omitted", () => {
+		const result = configSchema.parse(BASE_ENV);
+		expect(result.WEBHOOK_TYPE).toBe("EXECUTED_MULTISIG_TRANSACTION");
+	});
+
+	it("parses the pending transaction webhook type", () => {
+		const result = configSchema.parse({ ...BASE_ENV, WEBHOOK_TYPE: "PENDING_MULTISIG_TRANSACTION" });
+		expect(result.WEBHOOK_TYPE).toBe("PENDING_MULTISIG_TRANSACTION");
+	});
+
+	it("rejects an unknown webhook type", () => {
+		expect(() => configSchema.parse({ ...BASE_ENV, WEBHOOK_TYPE: "INCOMING_ETHER" })).toThrow();
+	});
+});
