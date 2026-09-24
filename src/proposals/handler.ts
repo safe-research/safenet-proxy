@@ -29,6 +29,8 @@ export const handleProposal = async (
 			return c.body(null, 202);
 		}
 
+		console.info(`Handling ${request.data.type} for ${request.data.address}`);
+
 		// Fetch transaction details synchronously
 		c.executionCtx.waitUntil(processProposalAsync(config, c.env.PROPOSAL_QUEUE, request.data));
 

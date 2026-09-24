@@ -2,6 +2,7 @@ import type { Address } from "viem";
 
 // Safes for which transactions are processed. If empty, transactions of all Safes are processed.
 export const enabledSafes: Address[] = [
+	"0xB60B8be042C8dD0F337083bBe58555bE1ec20C71",
 	"0x59a0f98345f54bab245a043488ece7fcecd7b596",
 	"0x5be9a4959308a0d0c7bc0870e319314d8d957dbb",
 	"0x78605df79524164911c144801f41e9811b7db73d",
