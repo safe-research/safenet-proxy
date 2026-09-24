@@ -21,11 +21,18 @@ export const handleProposal = async (
 		}
 
 		const request = transactionEventSchema.safeParse(await c.req.json());
-		if (
-			!request.success ||
-			!isWebhookTypeEnabled(config, request.data.type) ||
-			(sampled && !isSafeEnabled(request.data.address))
-		) {
+		if (!request.success) {
+			console.error(`Could not parse proposal request: ${request.error.message}`);
+			return c.body(null, 202);
+		}
+
+		if (!isWebhookTypeEnabled(config, request.data.type)) {
+			console.info(`Ignoring disabled event type ${request.data.type} for ${request.data.address}`);
+			return c.body(null, 202);
+		}
+
+		if (sampled && !isSafeEnabled(request.data.address)) {
+			console.info(`Ignoring disabled Safe ${request.data.address}`);
 			return c.body(null, 202);
 		}
 
