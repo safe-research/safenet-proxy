@@ -22,7 +22,7 @@ export const safeEventSchema = z.object({
 export const transactionEventTypeSchema = z.enum(["EXECUTED_MULTISIG_TRANSACTION", "PENDING_MULTISIG_TRANSACTION"]);
 
 export const transactionEventSchema = safeEventSchema.extend({
-	type: transactionEventTypeSchema,
+	type: z.string(),
 	safeTxHash: hexDataSchema,
 });
 
