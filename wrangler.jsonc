@@ -24,7 +24,7 @@
 		},
 		// Comma-separated list of chain IDs to submit attestations to
 		"CHAIN_IDS": "100",
-		"SAMPLE_RATE": "5",
+		"SAMPLE_RATE": "100",
 		// Safe webhook type to react to
 		// (EXECUTED_MULTISIG_TRANSACTION or PENDING_MULTISIG_TRANSACTION; defaults to EXECUTED_MULTISIG_TRANSACTION if unset)
 		"WEBHOOK_TYPE": "PENDING_MULTISIG_TRANSACTION"
