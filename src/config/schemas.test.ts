@@ -89,7 +89,7 @@ describe("configSchema — CONSENSUS_CONFIGS", () => {
 			CONSENSUS_CONFIGS: JSON.stringify({ "11155111": [{ address: lowercase }] }),
 		});
 		expect(result.CONSENSUS_CONFIGS["11155111"]).toStrictEqual([
-			{ address: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed" },
+			{ address: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", disableSampled: false },
 		]);
 	});
 
@@ -101,8 +101,8 @@ describe("configSchema — CONSENSUS_CONFIGS", () => {
 			CONSENSUS_CONFIGS: JSON.stringify({ "11155111": [{ address: addr1 }, { address: addr2 }] }),
 		});
 		expect(result.CONSENSUS_CONFIGS["11155111"]).toStrictEqual([
-			{ address: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed" },
-			{ address: "0x6B175474E89094C44Da98b954EedeAC495271d0F" },
+			{ address: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", disableSampled: false },
+			{ address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", disableSampled: false },
 		]);
 	});
 
@@ -117,6 +117,7 @@ describe("configSchema — CONSENSUS_CONFIGS", () => {
 			{
 				address: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
 				oracle: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+				disableSampled: false,
 			},
 		]);
 	});
@@ -304,5 +305,29 @@ describe("configSchema — WEBHOOK_TYPE", () => {
 
 	it("rejects an unknown webhook type", () => {
 		expect(() => configSchema.parse({ ...BASE_ENV, WEBHOOK_TYPE: "INCOMING_ETHER" })).toThrow();
+	});
+});
+
+describe("configSchema — CONSENSUS_CONFIGS disableSampled", () => {
+	it("defaults disableSampled to false", () => {
+		const result = configSchema.parse(BASE_ENV);
+		expect(result.CONSENSUS_CONFIGS["11155111"][0].disableSampled).toBe(false);
+	});
+
+	it("parses disableSampled when set", () => {
+		const result = configSchema.parse({
+			...BASE_ENV,
+			CONSENSUS_CONFIGS: JSON.stringify({ "11155111": [{ address: ZERO_ADDRESS, disableSampled: true }] }),
+		});
+		expect(result.CONSENSUS_CONFIGS["11155111"][0].disableSampled).toBe(true);
+	});
+
+	it("rejects a non-boolean disableSampled", () => {
+		expect(() =>
+			configSchema.parse({
+				...BASE_ENV,
+				CONSENSUS_CONFIGS: JSON.stringify({ "11155111": [{ address: ZERO_ADDRESS, disableSampled: "yes" }] }),
+			}),
+		).toThrow();
 	});
 });

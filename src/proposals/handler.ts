@@ -39,7 +39,7 @@ export const handleProposal = async (
 		console.info(`Handling ${request.data.type} for ${request.data.address}`);
 
 		// Fetch transaction details synchronously
-		c.executionCtx.waitUntil(processProposalAsync(config, c.env.PROPOSAL_QUEUE, request.data));
+		c.executionCtx.waitUntil(processProposalAsync(config, c.env.PROPOSAL_QUEUE, request.data, sampled));
 
 		return c.body(null, 202);
 	} catch (e: unknown) {
@@ -68,6 +68,7 @@ export const handleTx = async (
 		const message: QueueMessage = {
 			type: "TRANSACTION",
 			timestamp: Date.now(),
+			sampled,
 			data: request.data,
 		};
 
@@ -92,6 +93,7 @@ async function processProposalAsync(
 	config: Config,
 	queue: Queue<QueueMessage>,
 	event: TransactionEvent,
+	sampled: boolean,
 ): Promise<void> {
 	try {
 		const details = await transactionDetails(config.SAFE_API_KEY, event.chainId, event.safeTxHash);
@@ -103,6 +105,7 @@ async function processProposalAsync(
 		const message: QueueMessage = {
 			type: "TRANSACTION",
 			timestamp: Date.now(),
+			sampled,
 			data: details,
 		};
 

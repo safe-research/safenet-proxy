@@ -13,7 +13,8 @@
 	//   RELAYING_SAFES — JSON string mapping chain ID to a relaying Safe config ({safe, multiSend} addresses),
 	//                    e.g. {"11155111":{"safe":"0x...","multiSend":"0x..."},"100":{"safe":"0x...","multiSend":"0x..."}}
 	"vars": {
-		// Mapping of chain ID to a list of consensus configs (address + optional oracle)
+		// Mapping of chain ID to a list of consensus configs (address + optional oracle, + optional
+		// disableSampled to skip transactions received via the sampled endpoint)
 		"CONSENSUS_CONFIGS": {
 			"100": [
 				{

@@ -68,6 +68,7 @@ const SAFE_TX: SafeTransactionWithDomain = {
 const VALID_BODY: QueueMessage = {
 	type: "TRANSACTION",
 	timestamp: Date.now(),
+	sampled: false,
 	data: SAFE_TX,
 };
 
@@ -465,5 +466,51 @@ describe("handleQueueBatch — batching via MultiSend", () => {
 		await handleQueueBatch(makeBatch(messages), largeBatchGasEnv);
 
 		expect(mockSendTransaction).toHaveBeenCalledTimes(3);
+	});
+});
+
+describe("handleQueueBatch — consensus contracts disabled for sampled transactions", () => {
+	const ENABLED_ADDRESS: Address = "0x1111111111111111111111111111111111111111";
+	const DISABLED_ADDRESS: Address = "0x2222222222222222222222222222222222222222";
+
+	const env = {
+		...ENV_WITHOUT_RELAY,
+		CONSENSUS_CONFIGS: JSON.stringify({
+			[SEPOLIA_ID]: [{ address: ENABLED_ADDRESS }, { address: DISABLED_ADDRESS, disableSampled: true }],
+		}),
+	} as CloudflareBindings;
+
+	const submittedTargets = () => mockSendTransaction.mock.calls.map((args) => (args[0] as { to: Address }).to);
+
+	it("skips disabled consensus contracts for sampled transactions", async () => {
+		await handleQueueBatch(makeBatch([makeMessage({ ...VALID_BODY, sampled: true })]), env);
+
+		expect(submittedTargets()).toEqual([ENABLED_ADDRESS]);
+	});
+
+	it("submits to all consensus contracts for transactions that are not sampled", async () => {
+		await handleQueueBatch(makeBatch([makeMessage({ ...VALID_BODY, sampled: false })]), env);
+
+		expect(submittedTargets()).toEqual([ENABLED_ADDRESS, DISABLED_ADDRESS]);
+	});
+
+	it("treats messages without a sampled flag as not sampled", async () => {
+		const { sampled: _, ...legacyBody } = VALID_BODY;
+		await handleQueueBatch(makeBatch([makeMessage(legacyBody)]), env);
+
+		expect(submittedTargets()).toEqual([ENABLED_ADDRESS, DISABLED_ADDRESS]);
+	});
+
+	it("submits nothing for sampled transactions when all consensus contracts are disabled", async () => {
+		const allDisabledEnv = {
+			...ENV_WITHOUT_RELAY,
+			CONSENSUS_CONFIGS: JSON.stringify({ [SEPOLIA_ID]: [{ address: DISABLED_ADDRESS, disableSampled: true }] }),
+		} as CloudflareBindings;
+		const message = makeMessage({ ...VALID_BODY, sampled: true });
+
+		await handleQueueBatch(makeBatch([message]), allDisabledEnv);
+
+		expect(mockSendTransaction).not.toHaveBeenCalled();
+		expect(message.ack).toHaveBeenCalledOnce();
 	});
 });
