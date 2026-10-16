@@ -25,11 +25,11 @@ export async function handleQueueBatch(batch: MessageBatch<QueueMessage>, env: C
 	const account = privateKeyToAccount(config.PRIVATE_KEY);
 
 	// Parse all messages upfront; always ack everything at the end (no retry policy)
-	const transactions: SafeTransactionWithDomain[] = [];
+	const transactions: QueueMessage[] = [];
 	for (const message of batch.messages) {
 		const parsed = queueMessageSchema.safeParse(message.body);
 		if (parsed.success) {
-			transactions.push(parsed.data.data);
+			transactions.push(parsed.data);
 		} else {
 			console.error(`Failed to parse message ${message.id}: ${parsed.error.message}`);
 		}
@@ -69,7 +69,7 @@ async function processChainMessages(
 	relayingSafe: RelayingSafeConfig | undefined,
 	maxBatchGas: bigint,
 	account: ReturnType<typeof privateKeyToAccount>,
-	transactions: SafeTransactionWithDomain[],
+	transactions: QueueMessage[],
 ): Promise<void> {
 	const chain = extractChain({ chains: supportedChains, id: chainId });
 	const walletClient = createWalletClient({ chain, account, transport: http(rpcUrl) });
@@ -87,7 +87,9 @@ async function processChainMessages(
 	const baseNonce = await publicClient.getTransactionCount({ address: account.address, blockTag: "latest" });
 
 	// One inner call per (message, consensus config) pair.
-	const innerCalls = transactions.flatMap((tx) => consensusConfigs.map((config) => buildInnerCall(config, tx)));
+	const innerCalls = transactions.flatMap((tx) =>
+		consensusConfigsFor(consensusConfigs, tx).map((config) => buildInnerCall(config, tx.data)),
+	);
 
 	const submissions =
 		relayingSafe !== undefined
@@ -119,6 +121,15 @@ async function processChainMessages(
 			console.error(`Error submitting tx ${index} to chain ${chainId}: ${errorMessage}`);
 		}
 	}
+}
+
+// Consensus contracts that can opt out of sampled transactions, so that sampled
+// webhooks only generate traffic on specific contracts.
+function consensusConfigsFor(consensusConfigs: ConsensusConfig[], message: QueueMessage): ConsensusConfig[] {
+	if (!message.sampled) {
+		return consensusConfigs;
+	}
+	return consensusConfigs.filter((config) => !config.disableSampled);
 }
 
 // Base gas requirement for proposeTransaction's onchain execution.

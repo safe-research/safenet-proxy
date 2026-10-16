@@ -13,6 +13,8 @@ const jsonStringToRecord = <V extends z.ZodTypeAny>(valueSchema: V) =>
 export const consensusConfigSchema = z.object({
 	address: checkedAddressSchema,
 	oracle: checkedAddressSchema.optional(),
+	// If set, transactions received via the sampled endpoint are not proposed to this consensus contract.
+	disableSampled: z.boolean().default(false),
 });
 
 export const relayingSafeConfigSchema = z.object({

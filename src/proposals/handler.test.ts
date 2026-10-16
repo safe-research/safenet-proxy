@@ -186,3 +186,27 @@ describe("handleTx — enabled Safes", () => {
 		expect(sent).toHaveLength(1);
 	});
 });
+
+describe("sampled flag", () => {
+	it("marks proposals from the sampled endpoint as sampled", async () => {
+		const sent = await post("/sampled", JSON.stringify(event("EXECUTED_MULTISIG_TRANSACTION")), {
+			SAMPLE_RATE: "100",
+		});
+		expect(sent).toEqual([expect.objectContaining({ sampled: true })]);
+	});
+
+	it("marks proposals from the regular endpoint as not sampled", async () => {
+		const sent = await post("/propose", JSON.stringify(event("EXECUTED_MULTISIG_TRANSACTION")));
+		expect(sent).toEqual([expect.objectContaining({ sampled: false })]);
+	});
+
+	it("marks transactions from the sampled endpoint as sampled", async () => {
+		const sent = await post("/tx-sampled", serializeTx(SAFE_TX), { SAMPLE_RATE: "0" });
+		expect(sent).toEqual([expect.objectContaining({ sampled: true })]);
+	});
+
+	it("marks transactions from the regular endpoint as not sampled", async () => {
+		const sent = await post("/tx", serializeTx(SAFE_TX));
+		expect(sent).toEqual([expect.objectContaining({ sampled: false })]);
+	});
+});
